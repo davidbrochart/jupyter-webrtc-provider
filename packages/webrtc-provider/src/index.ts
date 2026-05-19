@@ -7,6 +7,8 @@ import {
   documentProviderFactoryPlugin
 } from './provider';
 
+export { awarenessProviderFactoryPlugin, documentProviderFactoryPlugin };
+
 const plugins: JupyterFrontEndPlugin<unknown>[] = [
   documentProviderFactoryPlugin,
   awarenessProviderFactoryPlugin

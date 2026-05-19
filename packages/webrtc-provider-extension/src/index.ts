@@ -3,7 +3,11 @@ import {
   JupyterFrontEndPlugin
 } from '@jupyterlab/application';
 
-import { IWebSocketFactory } from 'jupyter-webrtc-provider';
+import {
+  awarenessProviderFactoryPlugin,
+  documentProviderFactoryPlugin,
+  IWebSocketFactory
+} from 'jupyter-webrtc-provider';
 
 const PLUGIN_ID = 'jupyter-webrtc-provider';
 
@@ -19,6 +23,10 @@ export const webSocketFactoryPlugin: JupyterFrontEndPlugin<IWebSocketFactory> =
     }
   };
 
-const plugins: JupyterFrontEndPlugin<unknown>[] = [webSocketFactoryPlugin];
+const plugins: JupyterFrontEndPlugin<unknown>[] = [
+  webSocketFactoryPlugin,
+  documentProviderFactoryPlugin,
+  awarenessProviderFactoryPlugin
+];
 
 export default plugins;
