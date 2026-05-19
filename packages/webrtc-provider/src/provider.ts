@@ -1,34 +1,34 @@
 import {
   IAwarenessProviderFactory,
-  IDocumentProviderFactory,
-} from "@jupyter/docprovider";
+  IDocumentProviderFactory
+} from '@jupyter/docprovider';
 import {
   JupyterFrontEnd,
-  JupyterFrontEndPlugin,
-} from "@jupyterlab/application";
-import { ITranslator, TranslationBundle } from "@jupyterlab/translation";
-import { IDocumentProvider } from "@jupyter/collaborative-drive";
-import { ServerConnection, User, Contents } from "@jupyterlab/services";
+  JupyterFrontEndPlugin
+} from '@jupyterlab/application';
+import { ITranslator, TranslationBundle } from '@jupyterlab/translation';
+import { IDocumentProvider } from '@jupyter/collaborative-drive';
+import { ServerConnection, User, Contents } from '@jupyterlab/services';
 
-import { PromiseDelegate } from "@lumino/coreutils";
-import { Signal } from "@lumino/signaling";
+import { PromiseDelegate } from '@lumino/coreutils';
+import { Signal } from '@lumino/signaling';
 
-import { DocumentChange, YDocument } from "@jupyter/ydoc";
+import { DocumentChange, YDocument } from '@jupyter/ydoc';
 
-import { Awareness } from "y-protocols/awareness";
-import { WebrtcProvider as YWebrtcProvider } from "./webrtc";
+import { Awareness } from 'y-protocols/awareness';
+import { WebrtcProvider as YWebrtcProvider } from './webrtc';
 
-import { IForkProvider } from "@jupyter/docprovider";
-import { PageConfig, URLExt } from "@jupyterlab/coreutils";
-import { IWebSocketFactory } from "./websocket";
+import { IForkProvider } from '@jupyter/docprovider';
+import { PageConfig, URLExt } from '@jupyterlab/coreutils';
+import { IWebSocketFactory } from './websocket';
 
-import { WebRTCAwarenessProvider } from "./awareness";
+import { WebRTCAwarenessProvider } from './awareness';
 
-const PLUGIN_ID = "jupyter-webrtc-provider";
-const signalingServerUrls = PageConfig.getOption("signalingServers");
+const PLUGIN_ID = 'jupyter-webrtc-provider';
+const signalingServerUrls = PageConfig.getOption('signalingServers');
 const signalingServers = signalingServerUrls
   ? JSON.parse(signalingServerUrls)
-  : ["https://flyio-signaling-server.fly.dev"];
+  : ['https://flyio-signaling-server.fly.dev'];
 
 /**
  * A class to provide Yjs synchronization over WebRTC.
@@ -57,10 +57,10 @@ export class WebRTCProvider implements IDocumentProvider, IForkProvider {
       .then(() => {
         this._onUserChanged(user);
       })
-      .catch((e) => console.error(e));
+      .catch(e => console.error(e));
     user.userChanged.connect(this._onUserChanged, this);
 
-    this._connect().catch((e) => console.warn(e));
+    this._connect().catch(e => console.warn(e));
   }
 
   /**
@@ -92,7 +92,7 @@ export class WebRTCProvider implements IDocumentProvider, IForkProvider {
       return;
     }
     this._isDisposed = true;
-    this._webrtcProvider?.off("synced", this._onSynced);
+    this._webrtcProvider?.off('synced', this._onSynced);
     this._webrtcProvider?.destroy();
     this._disconnect();
     Signal.clearData(this);
@@ -123,18 +123,18 @@ export class WebRTCProvider implements IDocumentProvider, IForkProvider {
           try {
             this._sharedModel.source = model.content;
           } catch (e) {
-            console.error("Failed to load file content:", e);
+            console.error('Failed to load file content:', e);
           }
 
           // Mark document as not dirty after loading
-          const state = this._sharedModel.ydoc.getMap("state");
-          state.set("dirty", false);
-        },
+          const state = this._sharedModel.ydoc.getMap('state');
+          state.set('dirty', false);
+        }
       }
     );
 
-    this._webrtcProvider.on("synced", this._onSynced);
-    this._webrtcProvider.on("firstClient", () => {
+    this._webrtcProvider.on('synced', this._onSynced);
+    this._webrtcProvider.on('firstClient', () => {
       this._ready.resolve();
     });
   }
@@ -147,10 +147,10 @@ export class WebRTCProvider implements IDocumentProvider, IForkProvider {
       {
         signaling: this._signalingServers,
         awareness: this._awareness,
-        webSocketFactory: this._webSocketFactory,
+        webSocketFactory: this._webSocketFactory
       }
     );
-    this._webrtcProvider.on("synced", this._onSynced);
+    this._webrtcProvider.on('synced', this._onSynced);
   }
 
   async save(): Promise<void> {
@@ -158,30 +158,30 @@ export class WebRTCProvider implements IDocumentProvider, IForkProvider {
     const model = await this._drive.save(this._path, {
       content,
       format: this._format as Contents.FileFormat,
-      type: this._contentType,
+      type: this._contentType
     });
     // Update the hash from the server response and clear dirty flag
-    const state = this._sharedModel.ydoc.getMap("state");
-    state.set("hash", model.hash);
-    state.set("dirty", false);
+    const state = this._sharedModel.ydoc.getMap('state');
+    state.set('hash', model.hash);
+    state.set('dirty', false);
   }
 
   private _disconnect(): void {
-    this._webrtcProvider?.off("synced", this._onSynced);
+    this._webrtcProvider?.off('synced', this._onSynced);
     this._webrtcProvider?.destroy();
     this._webrtcProvider = null;
   }
 
   private _onUserChanged(user: User.IManager): void {
-    this._awareness.setLocalStateField("user", user.identity);
+    this._awareness.setLocalStateField('user', user.identity);
   }
 
   private _onSynced = (event: any) => {
     if (this._webrtcProvider) {
-      this._webrtcProvider.off("synced", this._onSynced);
+      this._webrtcProvider.off('synced', this._onSynced);
 
-      const state = this._sharedModel.ydoc.getMap("state");
-      state.set("document_id", this._webrtcProvider.roomName);
+      const state = this._sharedModel.ydoc.getMap('state');
+      state.set('document_id', this._webrtcProvider.roomName);
     }
     this._ready.resolve();
   };
@@ -267,10 +267,10 @@ function getAbsoluteUrls(
   const absoluteSignalingServers: string[] = [];
   signalingServers.forEach((url: string) => {
     if (
-      url.startsWith("ws://") ||
-      url.startsWith("wss://") ||
-      url.startsWith("http://") ||
-      url.startsWith("https://")
+      url.startsWith('ws://') ||
+      url.startsWith('wss://') ||
+      url.startsWith('http://') ||
+      url.startsWith('https://')
     ) {
       // It's an absolute URL, keep it as-is.
       absoluteSignalingServers.push(url);
@@ -306,7 +306,7 @@ class WebRTCDocumentProviderFactory implements IDocumentProviderFactory {
       translator: this._trans,
       serverSettings: options.serverSettings,
       drive: options.drive,
-      webSocketFactory: this._webSocketFactory,
+      webSocketFactory: this._webSocketFactory
     });
   }
 }
@@ -327,7 +327,7 @@ class WebRTCAwarenessProviderFactory implements IAwarenessProviderFactory {
       roomID: options.roomID,
       awareness: options.awareness,
       user: options.user,
-      webSocketFactory: this._webSocketFactory,
+      webSocketFactory: this._webSocketFactory
     });
   }
 }
@@ -337,8 +337,8 @@ class WebRTCAwarenessProviderFactory implements IAwarenessProviderFactory {
  */
 export const documentProviderFactoryPlugin: JupyterFrontEndPlugin<IDocumentProviderFactory> =
   {
-    id: PLUGIN_ID + "-document-factory",
-    description: "Provides a WebRTC document provider factory.",
+    id: PLUGIN_ID + '-document-factory',
+    description: 'Provides a WebRTC document provider factory.',
     requires: [ITranslator, IWebSocketFactory],
     optional: [],
     provides: IDocumentProviderFactory,
@@ -347,9 +347,9 @@ export const documentProviderFactoryPlugin: JupyterFrontEndPlugin<IDocumentProvi
       translator: ITranslator,
       webSocketFactory: IWebSocketFactory
     ) => {
-      const trans = translator.load("jupyter_collaboration");
+      const trans = translator.load('jupyter_collaboration');
       return new WebRTCDocumentProviderFactory(trans, webSocketFactory);
-    },
+    }
   };
 
 /**
@@ -357,8 +357,8 @@ export const documentProviderFactoryPlugin: JupyterFrontEndPlugin<IDocumentProvi
  */
 export const awarenessProviderFactoryPlugin: JupyterFrontEndPlugin<IAwarenessProviderFactory> =
   {
-    id: PLUGIN_ID + "-awareness-factory",
-    description: "Provides a WebRTC awareness provider factory.",
+    id: PLUGIN_ID + '-awareness-factory',
+    description: 'Provides a WebRTC awareness provider factory.',
     requires: [IWebSocketFactory],
     optional: [],
     provides: IAwarenessProviderFactory,
@@ -367,5 +367,5 @@ export const awarenessProviderFactoryPlugin: JupyterFrontEndPlugin<IAwarenessPro
       webSocketFactory: IWebSocketFactory
     ) => {
       return new WebRTCAwarenessProviderFactory(webSocketFactory);
-    },
+    }
   };
