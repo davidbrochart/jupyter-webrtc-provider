@@ -6,10 +6,15 @@
 **/tsconfig.test.json
 **/*.d.ts
 **/test
+**/ui-tests
 **/labextension
 
 docs
 tests
+.eslintrc.js
 jupyter-config
 jupyter_collaboration
-.mypy_cache
+
+packages/collaboration/babel.config.js
+packages/docprovider/babel.config.js
+packages/docprovider/jest.config.js
