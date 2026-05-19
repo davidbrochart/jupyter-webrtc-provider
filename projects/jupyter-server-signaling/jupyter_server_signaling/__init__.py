@@ -8,16 +8,16 @@ except ImportError:
     # in editable mode with pip. It is highly recommended to install
     # the package from a stable release or in editable mode: https://pip.pypa.io/en/stable/topics/local-project-installs/#editable-installs
     import warnings
-    warnings.warn("Importing 'jupyter_webrtc_provider' outside a proper installation.")
+    warnings.warn("Importing 'jupyter_server_signaling' outside a proper installation.")
     __version__ = "dev"
 
 
 def _jupyter_labextension_paths():
     return [{
         "src": "labextension",
-        "dest": "jupyter-webrtc-provider"
+        "dest": "jupyter-server-signaling"
     }]
 
 
 def _jupyter_server_extension_points():
-    return [{"module": "jupyter_webrtc_provider", "app": SignalingExtension}]
+    return [{"module": "jupyter_server_signaling", "app": SignalingExtension}]

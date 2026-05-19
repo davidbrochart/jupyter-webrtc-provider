@@ -1,0 +1,84 @@
+{
+  "name": "jupyter-webrtc-provider-extension",
+  "version": "0.1.0",
+  "description": "Jupyter WebRTC provider",
+  "keywords": [
+    "jupyter",
+    "jupyterlab",
+    "jupyterlab-extension"
+  ],
+  "homepage": "https://github.com/davidbrochart/jupyter-webrtc-provider",
+  "license": "BSD-3-Clause",
+  "author": "David Brochart",
+  "sideEffects": [
+    "style/*.css",
+    "style/index.js"
+  ],
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "style": "style/index.css",
+  "styleModule": "style/index.js",
+  "directories": {
+    "lib": "lib/"
+  },
+  "files": [
+    "lib/*.d.ts",
+    "lib/*.js.map",
+    "lib/*.js",
+    "schema/*.json",
+    "style/*.css",
+    "style/index.js"
+  ],
+  "scripts": {
+    "build": "jlpm run build:lib && jlpm run build:labextension:dev",
+    "build:lib": "tsc --sourceMap",
+    "build:lib:prod": "tsc",
+    "build:prod": "jlpm run clean && jlpm run build:lib:prod && jlpm run build:labextension",
+    "build:labextension": "jupyter labextension build .",
+    "build:labextension:dev": "jupyter labextension build --development True .",
+    "clean": "jlpm run clean:lib",
+    "clean:lib": "rimraf lib tsconfig.tsbuildinfo node_modules",
+    "clean:labextension": "rimraf ../../projects/jupyter-webrtc-provider/jupyter_webrtc_provider/labextension",
+    "clean:all": "jlpm run clean:lib && jlpm run clean:labextension",
+    "install:extension": "jlpm run build",
+    "watch": "run-p watch:src watch:labextension",
+    "watch:src": "tsc -w",
+    "watch:labextension": "jupyter labextension watch ."
+  },
+  "dependencies": {
+    "@jupyter/docprovider": "next",
+    "@jupyterlab/application": "^4.0.0",
+    "jupyter-webrtc-provider": "^0.0.0",
+    "simple-peer": "^9.11.1"
+  },
+  "devDependencies": {
+    "@jupyterlab/builder": "^4.5.0",
+    "@types/react": "~18.3.1",
+    "npm-run-all": "^4.1.5",
+    "rimraf": "^4.1.2",
+    "typescript": "~5.9.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "typedoc": {
+    "entryPoint": "./src/index.ts",
+    "readmeFile": "./README.md",
+    "displayName": "jupyter-webrtc-provider-extension",
+    "tsconfig": "./tsconfig.json"
+  },
+  "jupyterlab": {
+    "extension": true,
+    "outputDir": "../../projects/jupyter-webrtc-provider/jupyter_webrtc_provider/labextension",
+    "disabledExtensions": [
+      "@jupyter/docprovider-extension:websocket-provider-awareness-factory",
+      "@jupyter/docprovider-extension:websocket-provider-document-factory"
+    ],
+    "sharedPackages": {
+      "jupyter-webrtc-provider": {
+        "bundled": true,
+        "singleton": true
+      }
+    }
+  }
+}

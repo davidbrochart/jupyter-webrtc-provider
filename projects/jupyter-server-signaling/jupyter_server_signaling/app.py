@@ -9,7 +9,7 @@ from .handlers import SignalingWebSocketHandler
 
 
 class SignalingExtension(ExtensionApp):
-    name = "jupyter_webrtc_provider"
+    name = "jupyter_server_signaling"
     app_name = "Jupyter Signaling Server"
     description = """
     Enables discovery of peers connected through WebRTC

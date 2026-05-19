@@ -1,0 +1,67 @@
+[build-system]
+build-backend = "hatchling.build"
+requires = ["hatchling>=1.4.0", "jupyterlab>=4.0.0"]
+
+[project]
+name = "jupyter-webrtc-provider"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+description = "Jupyter WebRTC provider"
+classifiers = [
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Framework :: Jupyter",
+    "Framework :: Jupyter :: JupyterLab",
+    "Framework :: Jupyter :: JupyterLab :: 4",
+    "Framework :: Jupyter :: JupyterLab :: Extensions",
+    "Framework :: Jupyter :: JupyterLab :: Extensions :: Prebuilt",
+]
+authors = [
+    { name = "David Brochart", email = "david.brochart@gmail.com" },
+]
+dynamic = ["version"]
+
+[project.urls]
+Repository = "https://github.com/davidbrochart/jupyter-webrtc-provider"
+
+[tool.hatch.version]
+path = "jupyter_webrtc_provider/_version.py"
+
+[tool.hatch.build.targets.sdist]
+artifacts = ["jupyter_webrtc_provider/labextension"]
+exclude = ["/.github", "/binder", "node_modules"]
+
+[tool.hatch.build.targets.sdist.force-include]
+"../../packages/webrtc-provider" = "packages/webrtc-provider"
+"../../packages/webrtc-provider-extension" = "packages/webrtc-provider-extension"
+
+[tool.hatch.build.targets.wheel.shared-data]
+"jupyter_webrtc_provider/labextension" = "share/jupyter/labextensions/jupyter-webrtc-provider-extension"
+"install.json" = "share/jupyter/labextensions/jupyter-webrtc-provider-extension/install.json"
+
+[tool.hatch.build.hooks.jupyter-builder]
+dependencies = ["hatch-jupyter-builder>=0.5"]
+build-function = "hatch_jupyter_builder.npm_builder"
+ensured-targets = [
+    "jupyter_webrtc_provider/labextension/static/style.js",
+    "jupyter_webrtc_provider/labextension/package.json",
+]
+skip-if-exists = ["jupyter_webrtc_provider/labextension/static/style.js"]
+
+[tool.hatch.build.hooks.jupyter-builder.build-kwargs]
+npm = ["jlpm"]
+path = "../.."
+build_cmd = "build:prod"
+editable_build_cmd = "install:extension"
+
+[tool.check-wheel-contents]
+ignore = ["W002"]

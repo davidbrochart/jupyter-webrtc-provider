@@ -1,9 +1,9 @@
 [build-system]
-requires = ["hatchling>=1.5.0", "jupyterlab>=4.0.0,<5", "hatch-nodejs-version>=0.3.2"]
 build-backend = "hatchling.build"
+requires = ["hatchling>=1.4.0", "hatch-nodejs-version", "jupyterlab>=4.0.0"]
 
 [project]
-name = "jupyter_webrtc_provider"
+name = "jupyter-webrtc-provider-monorepo"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
@@ -23,58 +23,50 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
-    "jupyter-docprovider >=2.4.0,<3.0.0",
-    "jupyter-collaboration-ui >=2.4.0,<3.0.0",
+  # jupyter-server extensions
+  "jupyter-server-signaling @ {root:uri}/projects/jupyter-server-signaling",
+  # jupyterlab/notebook frontend extensions
+  "jupyter-docprovider @ {root:uri}/projects/jupyter-webrtc-provider",
+  # the metapackage
+  "jupyter-webrtc-provider @ {root:uri}/projects/jupyter-webrtc-provider",
 ]
-dynamic = ["version", "description", "authors", "urls", "keywords"]
+dynamic = ["version"]
 
 [tool.hatch.version]
 source = "nodejs"
 
-[tool.hatch.metadata.hooks.nodejs]
-fields = ["description", "authors", "urls", "keywords"]
-
-[tool.hatch.build.targets.sdist]
-artifacts = ["jupyter_webrtc_provider/labextension"]
-exclude = [".github", "binder"]
-
-[tool.hatch.build.targets.wheel.shared-data]
-"jupyter_webrtc_provider/labextension" = "share/jupyter/labextensions/jupyter-webrtc-provider"
-"install.json" = "share/jupyter/labextensions/jupyter-webrtc-provider/install.json"
-"jupyter-config/jupyter_webrtc_provider.json" = "etc/jupyter/jupyter_server_config.d/jupyter_webrtc_provider.json"
-
-[tool.hatch.build.hooks.version]
-path = "jupyter_webrtc_provider/_version.py"
-
-[tool.hatch.build.hooks.jupyter-builder]
-dependencies = ["hatch-jupyter-builder>=0.5"]
-build-function = "hatch_jupyter_builder.npm_builder"
-ensured-targets = [
-    "jupyter_webrtc_provider/labextension/static/style.js",
-    "jupyter_webrtc_provider/labextension/package.json",
+[tool.hatch.build]
+packages = [
+  "projects/jupyter-server-signaling",
+  "projects/jupyter-webrtc-provider",
 ]
-skip-if-exists = ["jupyter_webrtc_provider/labextension/static/style.js"]
 
-[tool.hatch.build.hooks.jupyter-builder.build-kwargs]
-build_cmd = "build:prod"
-npm = ["jlpm"]
+[tool.hatch.metadata]
+allow-direct-references = true
 
-[tool.hatch.build.hooks.jupyter-builder.editable-build-kwargs]
-build_cmd = "install:extension"
-npm = ["jlpm"]
-source_dir = "src"
-build_dir = "jupyter_webrtc_provider/labextension"
+[tool.jupyter-releaser]
+skip = ["check-links", "check-python"]
 
 [tool.jupyter-releaser.options]
-version_cmd = "hatch version"
+# `--skip-if-dirty` is a workaround for https://github.com/jupyter-server/jupyter_releaser/issues/567
+version-cmd = "cd ../.. && python scripts/bump_version.py --force --skip-if-dirty"
+python_packages = [
+    "projects/jupyter-server-signaling:jupyter-server-signaling",
+    "projects/jupyter-webrtc-provider:jupyter-webrtc-provider",
+]
 
 [tool.jupyter-releaser.hooks]
 before-build-npm = [
-    "python -m pip install 'jupyterlab>=4.0.0,<5'",
-    "jlpm",
-    "jlpm build:prod"
+    "YARN_ENABLE_IMMUTABLE_INSTALLS=0 jlpm build:prod"
 ]
-before-build-python = ["jlpm clean:all"]
-
-[tool.check-wheel-contents]
-ignore = ["W002"]
+before-build-python = [
+    "jlpm clean:all",
+    # Build the assets
+    "jlpm build:prod",
+    # Clean the build artifacts to not include them in sdist
+    "jlpm clean:lib"
+]
+before-bump-version = [
+    "python -m pip install -U jupyterlab tomlkit",
+    "jlpm"
+]

@@ -1,0 +1,54 @@
+{
+  "name": "jupyter-webrtc-provider",
+  "version": "0.0.0",
+  "description": "Jupyter WebRTC provider",
+  "homepage": "https://github.com/davidbrochart/jupyter-webrtc-provider",
+  "license": "BSD-3-Clause",
+  "author": "David Brochart",
+  "sideEffects": [
+    "style/**/*"
+  ],
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "directories": {
+    "lib": "lib/"
+  },
+  "files": [
+    "lib/**/*.{d.ts,eot,gif,html,jpg,js,js.map,json,png,svg,woff2,ttf}",
+    "schema/*.json",
+    "style/**/*.{css,eot,gif,html,jpg,json,png,svg,woff2,ttf}",
+    "style/index.js"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "build:prod": "jlpm run build",
+    "build:test": "tsc --build tsconfig.test.json",
+    "clean": "rimraf lib tsconfig.tsbuildinfo",
+    "clean:lib": "jlpm run clean:all",
+    "clean:all": "rimraf lib tsconfig.tsbuildinfo node_modules",
+    "install:extension": "jlpm run build",
+    "test": "jest",
+    "test:cov": "jest --collect-coverage",
+    "test:debug": "node --inspect-brk node_modules/.bin/jest --runInBand",
+    "test:debug:watch": "node --inspect-brk node_modules/.bin/jest --runInBand --watch",
+    "watch": "tsc -b --watch"
+  },
+  "dependencies": {
+    "@jupyter/docprovider": "^4.4.0",
+    "@jupyterlab/application": "^4.0.0",
+    "simple-peer": "^9.11.1"
+  },
+  "devDependencies": {
+    "@types/simple-peer": "^9.11.3",
+    "rimraf": "^4.1.2",
+    "typescript": "~5.5.4"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "typedoc": {
+    "entryPoint": "./src/index.ts",
+    "displayName": "jupyter-webrtc-provider",
+    "tsconfig": "./tsconfig.json"
+  }
+}
