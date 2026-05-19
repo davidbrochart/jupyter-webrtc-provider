@@ -1,9 +1,9 @@
-import { ServerConnection, User } from '@jupyterlab/services';
+import { ServerConnection, User } from "@jupyterlab/services";
 
-import { IAwareness } from '@jupyter/ydoc';
+import { IAwareness } from "@jupyter/ydoc";
 
-import { IWebSocketFactory } from './websocket';
-import { WebrtcProvider } from './webrtc';
+import { IWebSocketFactory } from "./websocket";
+import { WebrtcProvider } from "./webrtc";
 
 export interface IContent {
   type: string;
@@ -24,13 +24,13 @@ export class WebRTCAwarenessProvider extends WebrtcProvider {
     super(options.roomID, options.awareness.doc, {
       signaling: options.signalingServers,
       awareness: options.awareness,
-      webSocketFactory: options.webSocketFactory
+      webSocketFactory: options.webSocketFactory,
     });
     this.awareness = options.awareness;
     this._user = options.user;
     this._user.ready
       .then(() => this._onUserChanged(this._user))
-      .catch(e => console.error(e));
+      .catch((e) => console.error(e));
     this._user.userChanged.connect(this._onUserChanged, this);
   }
 
@@ -49,7 +49,7 @@ export class WebRTCAwarenessProvider extends WebrtcProvider {
   }
 
   private _onUserChanged(user: User.IManager): void {
-    this.awareness.setLocalStateField('user', user.identity);
+    this.awareness.setLocalStateField("user", user.identity);
   }
 
   readonly awareness: IAwareness;

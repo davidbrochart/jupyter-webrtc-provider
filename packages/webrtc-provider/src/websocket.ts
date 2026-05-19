@@ -1,4 +1,4 @@
-import { Token } from '@lumino/coreutils';
+import { Token } from "@lumino/coreutils";
 
 export interface IWebSocket {
   binaryType: BinaryType;
@@ -13,7 +13,7 @@ export interface IWebSocket {
 export type IWebSocketFactory = (url: string) => IWebSocket;
 
 export const IWebSocketFactory = new Token<IWebSocketFactory>(
-  'jupyter-webrtc-provider:IWebSocketFactory'
+  "jupyter-webrtc-provider:IWebSocketFactory"
 );
 
 type EventHandler = (...args: any[]) => void;
@@ -35,7 +35,7 @@ class EventEmitter {
   }
 
   emit(event: string, args: any[]): void {
-    this._listeners.get(event)?.forEach(handler => handler(...args));
+    this._listeners.get(event)?.forEach((handler) => handler(...args));
   }
 
   destroy(): void {
@@ -63,9 +63,9 @@ export class WebsocketClient extends EventEmitter {
     url: string,
     {
       binaryType,
-      webSocketFactory
+      webSocketFactory,
     }: {
-      binaryType?: 'arraybuffer' | 'blob' | null;
+      binaryType?: "arraybuffer" | "blob" | null;
       webSocketFactory: IWebSocketFactory;
     }
   ) {
@@ -102,15 +102,15 @@ export class WebsocketClient extends EventEmitter {
     websocket.onmessage = (event: MessageEvent) => {
       this.lastMessageReceived = Date.now();
       const data = event.data;
-      const message = typeof data === 'string' ? JSON.parse(data) : data;
-      if (message && message.type === 'pong') {
+      const message = typeof data === "string" ? JSON.parse(data) : data;
+      if (message && message.type === "pong") {
         clearTimeout(pingTimeout);
         pingTimeout = setTimeout(
           () => this._sendPing(),
           messageReconnectTimeout / 2
         );
       }
-      this.emit('message', [message, this]);
+      this.emit("message", [message, this]);
     };
 
     const onclose = (error?: any) => {
@@ -119,7 +119,7 @@ export class WebsocketClient extends EventEmitter {
         this.connecting = false;
         if (this.connected) {
           this.connected = false;
-          this.emit('disconnect', [{ type: 'disconnect', error }, this]);
+          this.emit("disconnect", [{ type: "disconnect", error }, this]);
         } else {
           this.unsuccessfulReconnects++;
         }
@@ -135,13 +135,13 @@ export class WebsocketClient extends EventEmitter {
     };
 
     websocket.onclose = () => onclose();
-    websocket.onerror = error => onclose(error);
+    websocket.onerror = (error) => onclose(error);
     websocket.onopen = () => {
       this.lastMessageReceived = Date.now();
       this.connecting = false;
       this.connected = true;
       this.unsuccessfulReconnects = 0;
-      this.emit('connect', [{ type: 'connect' }, this]);
+      this.emit("connect", [{ type: "connect" }, this]);
       pingTimeout = setTimeout(
         () => this._sendPing(),
         messageReconnectTimeout / 2
@@ -151,7 +151,7 @@ export class WebsocketClient extends EventEmitter {
 
   private _sendPing(): void {
     if (this.ws) {
-      this.send({ type: 'ping' });
+      this.send({ type: "ping" });
     }
   }
 

@@ -1,1 +1,1 @@
-import 'jupyter-webrtc-provider/style/index.js';
+import "jupyter-webrtc-provider/style/index.js";

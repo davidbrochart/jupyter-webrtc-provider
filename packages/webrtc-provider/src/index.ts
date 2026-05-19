@@ -1,15 +1,15 @@
-export { IWebSocketFactory } from './websocket';
+export { IWebSocketFactory } from "./websocket";
 
-import { JupyterFrontEndPlugin } from '@jupyterlab/application';
+import { JupyterFrontEndPlugin } from "@jupyterlab/application";
 
 import {
   awarenessProviderFactoryPlugin,
-  documentProviderFactoryPlugin
-} from './provider';
+  documentProviderFactoryPlugin,
+} from "./provider";
 
 const plugins: JupyterFrontEndPlugin<unknown>[] = [
   documentProviderFactoryPlugin,
-  awarenessProviderFactoryPlugin
+  awarenessProviderFactoryPlugin,
 ];
 
 export default plugins;
