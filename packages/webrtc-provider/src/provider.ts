@@ -291,7 +291,8 @@ class WebRTCDocumentProviderFactory implements IDocumentProviderFactory {
     webSocketFactory: IWebSocketFactory | undefined
   ) {
     this._trans = trans;
-    this._webSocketFactory = webSocketFactory ?? ((url: string) => new WebSocket(url));
+    this._webSocketFactory =
+      webSocketFactory ?? ((url: string) => new WebSocket(url));
   }
 
   create(options: IDocumentProviderFactory.IOptions) {
@@ -322,7 +323,8 @@ class WebRTCDocumentProviderFactory implements IDocumentProviderFactory {
  */
 class WebRTCAwarenessProviderFactory implements IAwarenessProviderFactory {
   constructor(webSocketFactory: IWebSocketFactory | undefined) {
-    this._webSocketFactory = webSocketFactory ?? ((url: string) => new WebSocket(url));
+    this._webSocketFactory =
+      webSocketFactory ?? ((url: string) => new WebSocket(url));
   }
 
   create(options: IAwarenessProviderFactory.IOptions) {
