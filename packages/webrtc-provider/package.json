@@ -20,18 +20,20 @@
     "style/index.js"
   ],
   "scripts": {
-    "build": "tsc -b",
-    "build:prod": "jlpm run build",
-    "build:test": "tsc --build tsconfig.test.json",
-    "clean": "rimraf lib tsconfig.tsbuildinfo",
-    "clean:lib": "jlpm run clean:all",
-    "clean:all": "rimraf lib tsconfig.tsbuildinfo node_modules",
+    "build": "jlpm run build:lib && jlpm run build:labextension:dev",
+    "build:lib": "tsc --sourceMap",
+    "build:lib:prod": "tsc",
+    "build:prod": "jlpm run clean && jlpm run build:lib:prod && jlpm run build:extension",
+    "build:labextension": "jupyter labextension build .",
+    "build:labextension:dev": "jupyter labextension build --development True .",
+    "clean": "jlpm run clean:lib",
+    "clean:lib": "rimraf lib tsconfig.tsbuildinfo node_modules",
+    "clean:labextension": "rimraf ../../projects/jupyter-webrtc-provider/jupyter_webrtc_provider/labextension",
+    "clean:all": "jlpm run clean:lib && jlpm run clean:labextension",
     "install:extension": "jlpm run build",
-    "test": "jest",
-    "test:cov": "jest --collect-coverage",
-    "test:debug": "node --inspect-brk node_modules/.bin/jest --runInBand",
-    "test:debug:watch": "node --inspect-brk node_modules/.bin/jest --runInBand --watch",
-    "watch": "tsc -b --watch"
+    "watch": "run-p watch:src watch:labextension",
+    "watch:src": "tsc -w",
+    "watch:labextension": "jupyter labextension watch ."
   },
   "dependencies": {
     "@jupyter/docprovider": "^4.4.0",
@@ -39,6 +41,7 @@
     "simple-peer": "^9.11.1"
   },
   "devDependencies": {
+    "@jupyterlab/builder": "^4.5.0",
     "@types/simple-peer": "^9.11.3",
     "rimraf": "^4.1.2",
     "typescript": "~5.5.4"
@@ -50,5 +53,13 @@
     "entryPoint": "./src/index.ts",
     "displayName": "jupyter-webrtc-provider",
     "tsconfig": "./tsconfig.json"
+  },
+  "jupyterlab": {
+    "extension": true,
+    "outputDir": "../../projects/jupyter-webrtc-provider/jupyter_webrtc_provider/labextension",
+    "disabledExtensions": [
+      "@jupyter/docprovider-extension:websocket-provider-awareness-factory",
+      "@jupyter/docprovider-extension:websocket-provider-document-factory"
+    ]
   }
 }

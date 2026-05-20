@@ -26,8 +26,6 @@ dependencies = [
   # jupyter-server extensions
   "jupyter-server-signaling @ {root:uri}/projects/jupyter-server-signaling",
   # jupyterlab/notebook frontend extensions
-  "jupyter-docprovider @ {root:uri}/projects/jupyter-webrtc-provider",
-  # the metapackage
   "jupyter-webrtc-provider @ {root:uri}/projects/jupyter-webrtc-provider",
 ]
 dynamic = ["version"]

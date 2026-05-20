@@ -42,11 +42,10 @@ exclude = ["/.github", "/binder", "node_modules"]
 
 [tool.hatch.build.targets.sdist.force-include]
 "../../packages/webrtc-provider" = "packages/webrtc-provider"
-"../../packages/webrtc-provider-extension" = "packages/webrtc-provider-extension"
 
 [tool.hatch.build.targets.wheel.shared-data]
-"jupyter_webrtc_provider/labextension" = "share/jupyter/labextensions/jupyter-webrtc-provider-extension"
-"install.json" = "share/jupyter/labextensions/jupyter-webrtc-provider-extension/install.json"
+"jupyter_webrtc_provider/labextension" = "share/jupyter/labextensions/jupyter-webrtc-provider"
+"install.json" = "share/jupyter/labextensions/jupyter-webrtc-provider/install.json"
 
 [tool.hatch.build.hooks.jupyter-builder]
 dependencies = ["hatch-jupyter-builder>=0.5"]
