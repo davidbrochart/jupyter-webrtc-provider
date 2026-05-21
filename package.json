@@ -11,7 +11,7 @@
     "bugs": {
         "url": "https://github.com/davidbrochart/jupyter-webrtc-provider/issues"
     },
-    "license": "BSD-3-Clause",
+    "license": "MIT",
     "author": {
         "name": "David Brochart",
         "email": "david.brochart@gmail.com"
