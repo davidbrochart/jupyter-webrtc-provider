@@ -10,7 +10,7 @@ export interface IWebSocket {
   close(): void;
 }
 
-export type IWebSocketFactory = (url: string) => IWebSocket;
+export type IWebSocketFactory = (url: string) => Promise<IWebSocket>;
 
 export const IWebSocketFactory = new Token<IWebSocketFactory>(
   'jupyter-webrtc-provider:IWebSocketFactory'
@@ -84,12 +84,12 @@ export class WebsocketClient extends EventEmitter {
     this._setupWS();
   }
 
-  private _setupWS(): void {
+  private async _setupWS(): Promise<void> {
     if (!this.shouldConnect || this.ws !== null) {
       return;
     }
 
-    const websocket = this._webSocketFactory(this.url);
+    const websocket = await this._webSocketFactory(this.url);
     if (this.binaryType) {
       websocket.binaryType = this.binaryType;
     }

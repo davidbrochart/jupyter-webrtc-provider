@@ -20,7 +20,7 @@ import { WebrtcProvider as YWebrtcProvider } from './webrtc';
 
 import { IForkProvider } from '@jupyter/docprovider';
 import { PageConfig, URLExt } from '@jupyterlab/coreutils';
-import { IWebSocketFactory } from './websocket';
+import { IWebSocket, IWebSocketFactory } from './websocket';
 
 import { WebRTCAwarenessProvider } from './awareness';
 
@@ -292,7 +292,8 @@ class WebRTCDocumentProviderFactory implements IDocumentProviderFactory {
   ) {
     this._trans = trans;
     this._webSocketFactory =
-      webSocketFactory ?? ((url: string) => new WebSocket(url));
+      webSocketFactory ??
+      (async (url: string) => new WebSocket(url) as unknown as IWebSocket);
   }
 
   create(options: IDocumentProviderFactory.IOptions) {
@@ -324,7 +325,8 @@ class WebRTCDocumentProviderFactory implements IDocumentProviderFactory {
 class WebRTCAwarenessProviderFactory implements IAwarenessProviderFactory {
   constructor(webSocketFactory: IWebSocketFactory | undefined) {
     this._webSocketFactory =
-      webSocketFactory ?? ((url: string) => new WebSocket(url));
+      webSocketFactory ??
+      (async (url: string) => new WebSocket(url) as unknown as IWebSocket);
   }
 
   create(options: IAwarenessProviderFactory.IOptions) {
