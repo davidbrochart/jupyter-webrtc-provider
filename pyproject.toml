@@ -1,9 +1,9 @@
 [build-system]
+requires = ["hatchling>=1.5.0", "jupyterlab>=4.0.0,<5", "hatch-nodejs-version>=0.3.2"]
 build-backend = "hatchling.build"
-requires = ["hatchling>=1.4.0", "hatch-nodejs-version", "jupyterlab>=4.0.0"]
 
 [project]
-name = "jupyter-webrtc-provider-monorepo"
+name = "jupyter_webrtc_provider"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
@@ -13,7 +13,7 @@ classifiers = [
     "Framework :: Jupyter :: JupyterLab :: 4",
     "Framework :: Jupyter :: JupyterLab :: Extensions",
     "Framework :: Jupyter :: JupyterLab :: Extensions :: Prebuilt",
-    "License :: OSI Approved :: BSD License",
+    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
@@ -23,56 +23,57 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
-  # jupyter-server extensions
-  "jupyter-server-signaling @ {root:uri}/projects/jupyter-server-signaling",
-  # jupyterlab/notebook frontend extensions
-  "jupyter-webrtc-provider @ {root:uri}/projects/jupyter-webrtc-provider",
+    "jupyter-docprovider >=2.4.0,<3.0.0",
+    "jupyter-collaboration-ui >=2.4.0,<3.0.0",
 ]
-dynamic = ["version"]
-
-[project.optional-dependencies]
-dev = [
-    "click",
-    "pre-commit",
-    "jupyter_releaser",
-    "tomlkit"
-]
+dynamic = ["version", "description", "authors", "urls", "keywords"]
 
 [tool.hatch.version]
 source = "nodejs"
 
-[tool.hatch.build]
-packages = [
-  "projects/jupyter-server-signaling",
-  "projects/jupyter-webrtc-provider",
+[tool.hatch.metadata.hooks.nodejs]
+fields = ["description", "authors", "urls", "keywords"]
+
+[tool.hatch.build.targets.sdist]
+artifacts = ["jupyter_webrtc_provider/labextension"]
+exclude = [".github", "binder"]
+
+[tool.hatch.build.targets.wheel.shared-data]
+"jupyter_webrtc_provider/labextension" = "share/jupyter/labextensions/jupyter-webrtc-provider"
+"install.json" = "share/jupyter/labextensions/jupyter-webrtc-provider/install.json"
+
+[tool.hatch.build.hooks.version]
+path = "jupyter_webrtc_provider/_version.py"
+
+[tool.hatch.build.hooks.jupyter-builder]
+dependencies = ["hatch-jupyter-builder>=0.5"]
+build-function = "hatch_jupyter_builder.npm_builder"
+ensured-targets = [
+    "jupyter_webrtc_provider/labextension/static/style.js",
+    "jupyter_webrtc_provider/labextension/package.json",
 ]
+skip-if-exists = ["jupyter_webrtc_provider/labextension/static/style.js"]
 
-[tool.hatch.metadata]
-allow-direct-references = true
+[tool.hatch.build.hooks.jupyter-builder.build-kwargs]
+build_cmd = "build:prod"
+npm = ["jlpm"]
 
-[tool.jupyter-releaser]
-skip = ["check-links", "check-python"]
+[tool.hatch.build.hooks.jupyter-builder.editable-build-kwargs]
+build_cmd = "install:extension"
+npm = ["jlpm"]
+source_dir = "src"
+build_dir = "jupyter_webrtc_provider/labextension"
 
 [tool.jupyter-releaser.options]
-# `--skip-if-dirty` is a workaround for https://github.com/jupyter-server/jupyter_releaser/issues/567
-version-cmd = "cd ../.. && python scripts/bump_version.py --force --skip-if-dirty"
-python_packages = [
-    "projects/jupyter-server-signaling:jupyter-server-signaling",
-    "projects/jupyter-webrtc-provider:jupyter-webrtc-provider",
-]
+version_cmd = "hatch version"
 
 [tool.jupyter-releaser.hooks]
 before-build-npm = [
-    "YARN_ENABLE_IMMUTABLE_INSTALLS=0 jlpm build:prod"
+    "python -m pip install 'jupyterlab>=4.0.0,<5'",
+    "jlpm",
+    "jlpm build:prod"
 ]
-before-build-python = [
-    "jlpm clean:all",
-    # Build the assets
-    "jlpm build:prod",
-    # Clean the build artifacts to not include them in sdist
-    "jlpm clean:lib"
-]
-before-bump-version = [
-    "python -m pip install -U jupyterlab tomlkit",
-    "jlpm"
-]
+before-build-python = ["jlpm clean:all"]
+
+[tool.check-wheel-contents]
+ignore = ["W002"]
