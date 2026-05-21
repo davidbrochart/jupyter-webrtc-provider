@@ -96,11 +96,11 @@ def bump(force, skip_if_dirty, spec):
         project = version_file.parent.name
         project_pins[project] = version_spec
 
-    # bump the required version in jupyter-collaboration metapackage
-    # to ensure that users can just upgrade `jupyter-collaboration`
+    # bump the required version in jupyter-webrtc-provider metapackage
+    # to ensure that users can just upgrade `jupyter-webrtc-provider`
     # and get all fixes for free.
     # Formatting based on https://stackoverflow.com/questions/70721025/tomlkit-nicely-formatted-array-with-inline-tables
-    metapackage = "jupyter-collaboration"
+    metapackage = "jupyter-webrtc-provider"
     metapackage_toml_path = HERE / "projects" / metapackage / "pyproject.toml"
     metapackage_toml = tomlkit.parse(metapackage_toml_path.read_text())
     old_dependencies = metapackage_toml.get("project").get("dependencies")

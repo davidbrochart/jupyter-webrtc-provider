@@ -30,6 +30,14 @@ dependencies = [
 ]
 dynamic = ["version"]
 
+[project.optional-dependencies]
+dev = [
+    "click",
+    "pre-commit",
+    "jupyter_releaser",
+    "tomlkit"
+]
+
 [tool.hatch.version]
 source = "nodejs"
 

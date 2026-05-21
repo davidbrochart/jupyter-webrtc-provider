@@ -1,6 +1,6 @@
 {
   "name": "jupyter-webrtc-provider",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Jupyter WebRTC provider",
   "homepage": "https://github.com/davidbrochart/jupyter-webrtc-provider",
   "license": "BSD-3-Clause",
