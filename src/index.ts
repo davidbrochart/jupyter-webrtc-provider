@@ -5,13 +5,13 @@ import { JupyterFrontEndPlugin } from '@jupyterlab/application';
 import {
   awarenessProviderFactoryPlugin,
   documentProviderFactoryPlugin,
-  IWebSocketRoomIdFactory
+  IRoomIdFactory
 } from './provider';
 
 export {
   awarenessProviderFactoryPlugin,
   documentProviderFactoryPlugin,
-  IWebSocketRoomIdFactory
+  IRoomIdFactory
 };
 
 const plugins: JupyterFrontEndPlugin<unknown>[] = [

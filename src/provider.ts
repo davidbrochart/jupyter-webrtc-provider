@@ -30,14 +30,14 @@ const signalingServers = signalingServerUrls
   ? JSON.parse(signalingServerUrls)
   : ['https://flyio-signaling-server.fly.dev'];
 
-export type IWebSocketRoomIdFactory = (
+export type IRoomIdFactory = (
   format: string,
   contentType: string,
   path: string
 ) => string;
 
-export const IWebSocketRoomIdFactory = new Token<IWebSocketRoomIdFactory>(
-  'jupyter-webrtc-provider:IWebSocketRoomIdFactory'
+export const IRoomIdFactory = new Token<IRoomIdFactory>(
+  'jupyter-webrtc-provider:IRoomIdFactory'
 );
 
 /**
@@ -208,7 +208,7 @@ export class WebRTCProvider implements IDocumentProvider, IForkProvider {
   private _signalingServers: string[];
   private _drive: Contents.IDrive;
   private _webSocketFactory: IWebSocketFactory;
-  private _roomIdFactory: IWebSocketRoomIdFactory;
+  private _roomIdFactory: IRoomIdFactory;
 }
 
 /**
@@ -272,7 +272,7 @@ export namespace WebRTCProvider {
     /**
      * The routine for computing the room id, given the file information.
      */
-    roomIdFactory: IWebSocketRoomIdFactory;
+    roomIdFactory: IRoomIdFactory;
   }
 }
 
@@ -306,7 +306,7 @@ class WebRTCDocumentProviderFactory implements IDocumentProviderFactory {
   constructor(
     trans: TranslationBundle,
     webSocketFactory: IWebSocketFactory | undefined,
-    roomIdFactory: IWebSocketRoomIdFactory | undefined = undefined
+    roomIdFactory: IRoomIdFactory | undefined = undefined
   ) {
     this._trans = trans;
     this._webSocketFactory =
@@ -340,7 +340,7 @@ class WebRTCDocumentProviderFactory implements IDocumentProviderFactory {
 
   private _trans: TranslationBundle;
   private _webSocketFactory: IWebSocketFactory;
-  private _roomIdFactory: IWebSocketRoomIdFactory;
+  private _roomIdFactory: IRoomIdFactory;
 }
 
 /**
