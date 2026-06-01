@@ -4,10 +4,15 @@ import { JupyterFrontEndPlugin } from '@jupyterlab/application';
 
 import {
   awarenessProviderFactoryPlugin,
-  documentProviderFactoryPlugin
+  documentProviderFactoryPlugin,
+  IWebSocketRoomIdFactory
 } from './provider';
 
-export { awarenessProviderFactoryPlugin, documentProviderFactoryPlugin };
+export {
+  awarenessProviderFactoryPlugin,
+  documentProviderFactoryPlugin,
+  IWebSocketRoomIdFactory
+};
 
 const plugins: JupyterFrontEndPlugin<unknown>[] = [
   documentProviderFactoryPlugin,
