@@ -25,7 +25,8 @@ import { IWebSocket, IWebSocketFactory } from './websocket';
 import { WebRTCAwarenessProvider } from './awareness';
 import { DEFAULT_ROOM_ID_MANAGER, IRoomIdManager } from './roomid';
 
-const DEFAULT_WEBSOCKET_FACTORY = (async (url: string) => new WebSocket(url) as unknown as IWebSocket);
+const DEFAULT_WEBSOCKET_FACTORY = async (url: string) =>
+  new WebSocket(url) as unknown as IWebSocket;
 const PLUGIN_ID = 'jupyter-webrtc-provider';
 const signalingServerUrls = PageConfig.getOption('signalingServers');
 const signalingServers = signalingServerUrls
@@ -384,7 +385,11 @@ export const documentProviderFactoryPlugin: JupyterFrontEndPlugin<IDocumentProvi
       roomIdManager?: IRoomIdManager
     ) => {
       const trans = translator.load('jupyter_collaboration');
-      return new WebRTCDocumentProviderFactory(trans, webSocketFactory, roomIdManager);
+      return new WebRTCDocumentProviderFactory(
+        trans,
+        webSocketFactory,
+        roomIdManager
+      );
     }
   };
 
