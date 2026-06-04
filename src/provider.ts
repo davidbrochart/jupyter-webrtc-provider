@@ -148,6 +148,7 @@ export class WebRTCProvider implements IDocumentProvider, IForkProvider {
     this._webrtcProvider.on('synced', this._onSynced);
     this._webrtcProvider.on('firstClient', () => {
       this._ready.resolve();
+      this._connected = true;
     });
     this._waitConnect();
   }
