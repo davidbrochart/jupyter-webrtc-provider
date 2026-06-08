@@ -758,17 +758,22 @@ export class WebrtcProvider extends ObservableV2<IWebrtcProviderEvents> {
     return this.room !== null && this.shouldConnect;
   }
 
-  connect(): void {
+  async connect(): Promise<void> {
     this.shouldConnect = true;
-    this.signalingUrls.forEach(url => {
-      const signalingConn = map.setIfUndefined(
-        signalingConns,
-        url,
-        () => new SignalingConn(url, this.webSocketFactory, this.roomIdManager)
-      );
+    for (const url of this.signalingUrls) {
+      let signalingConn = signalingConns.get(url);
+      if (signalingConn === undefined) {
+        signalingConn = new SignalingConn(
+          url,
+          this.webSocketFactory,
+          this.roomIdManager
+        );
+        await signalingConn.ready;
+        signalingConns.set(url, signalingConn);
+      }
       this.signalingConns.push(signalingConn);
       signalingConn.providers.add(this);
-    });
+    }
     if (this.room) {
       this.room.connect();
       emitStatus(this);
