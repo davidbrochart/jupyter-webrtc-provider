@@ -16,6 +16,34 @@ export const IWebSocketFactory = new Token<IWebSocketFactory>(
   'jupyter-webrtc-provider:websocket-factory'
 );
 
+export class AsyncEvent {
+  private resolved = false;
+  private promise: Promise<void> | null = null;
+  private resolve: (() => void) | null = null;
+
+  wait(): Promise<void> {
+    if (this.resolved) {
+      return Promise.resolve();
+    }
+    if (this.promise === null) {
+      this.promise = new Promise<void>(resolve => {
+        this.resolve = resolve;
+      });
+    }
+    return this.promise;
+  }
+
+  set(): void {
+    if (this.resolved) {
+      return;
+    }
+    this.resolved = true;
+    this.resolve?.();
+    this.promise = null;
+    this.resolve = null;
+  }
+}
+
 type EventHandler = (...args: any[]) => void;
 
 class EventEmitter {
@@ -56,6 +84,7 @@ export class WebsocketClient extends EventEmitter {
   unsuccessfulReconnects = 0;
   lastMessageReceived = 0;
   shouldConnect = true;
+  private _ready: AsyncEvent;
   private _checkInterval: any;
   private _webSocketFactory: IWebSocketFactory;
 
@@ -81,7 +110,12 @@ export class WebsocketClient extends EventEmitter {
         this.ws?.close();
       }
     }, messageReconnectTimeout / 2);
+    this._ready = new AsyncEvent();
     this._setupWS();
+  }
+
+  get ready(): Promise<void> {
+    return this._ready.wait();
   }
 
   private async _setupWS(): Promise<void> {
@@ -113,8 +147,8 @@ export class WebsocketClient extends EventEmitter {
         } else if (message.type === 'ping') {
           this.send({ type: 'pong' });
         }
+        this.emit('message', [message, this]);
       }
-      this.emit('message', [message, this]);
     };
 
     const onclose = (error?: any) => {
@@ -151,6 +185,7 @@ export class WebsocketClient extends EventEmitter {
         messageReconnectTimeout / 2
       );
     };
+    this._ready.set();
   }
 
   send(message: any): void {
@@ -164,10 +199,10 @@ export class WebsocketClient extends EventEmitter {
     this.ws?.close();
   }
 
-  connect(): void {
+  async connect(): Promise<void> {
     this.shouldConnect = true;
     if (!this.connected && this.ws === null) {
-      this._setupWS();
+      await this._setupWS();
     }
   }
 
