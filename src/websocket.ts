@@ -42,6 +42,42 @@ export class AsyncEvent {
     this.promise = null;
     this.resolve = null;
   }
+
+  is_set(): boolean {
+    return this.resolved;
+  }
+}
+
+class AsyncLock {
+  private locked = false;
+  private queue: Array<
+    (value: (() => void) | PromiseLike<() => void>) => void
+  > = [];
+
+  async acquire(): Promise<() => void> {
+    return new Promise(resolve => {
+      if (!this.locked) {
+        this.locked = true;
+        resolve(() => {
+          this.locked = false;
+          this.next();
+        });
+      } else {
+        this.queue.push(resolve);
+      }
+    });
+  }
+
+  private next() {
+    if (this.queue.length > 0) {
+      const nextResolve = this.queue.shift()!;
+      this.locked = true;
+      nextResolve(() => {
+        this.locked = false;
+        this.next();
+      });
+    }
+  }
 }
 
 type EventHandler = (...args: any[]) => void;
@@ -84,9 +120,11 @@ export class WebsocketClient extends EventEmitter {
   unsuccessfulReconnects = 0;
   lastMessageReceived = 0;
   shouldConnect = true;
-  private _ready: AsyncEvent;
   private _checkInterval: any;
   private _webSocketFactory: IWebSocketFactory;
+  private _lock: AsyncLock;
+  private _ready: AsyncEvent;
+  private _messagesToSend: string[];
 
   constructor(
     url: string,
@@ -110,87 +148,103 @@ export class WebsocketClient extends EventEmitter {
         this.ws?.close();
       }
     }, messageReconnectTimeout / 2);
+    this._lock = new AsyncLock();
     this._ready = new AsyncEvent();
+    this._messagesToSend = [];
+    this._bufferizeMessages();
     this._setupWS();
   }
 
-  get ready(): Promise<void> {
-    return this._ready.wait();
+  private async _bufferizeMessages(): Promise<void> {
+    await this._ready.wait();
+    for (const message of this._messagesToSend) {
+      await this.ws!.send(message);
+    }
+    this._messagesToSend = [];
   }
 
   private async _setupWS(): Promise<void> {
-    if (!this.shouldConnect || this.ws !== null) {
-      return;
-    }
+    const release = await this._lock.acquire();
+    try {
+      if (!this.shouldConnect || this.ws !== null) {
+        return;
+      }
 
-    const websocket = await this._webSocketFactory(this.url);
-    if (this.binaryType) {
-      websocket.binaryType = this.binaryType;
-    }
-    this.ws = websocket;
-    this.connecting = true;
-    this.connected = false;
+      const websocket = await this._webSocketFactory(this.url);
+      if (this.binaryType) {
+        websocket.binaryType = this.binaryType;
+      }
+      this.ws = websocket;
+      this.connecting = true;
+      this.connected = false;
 
-    let pingTimeout: any = null;
+      let pingTimeout: any = null;
 
-    websocket.onmessage = (event: MessageEvent) => {
-      this.lastMessageReceived = Date.now();
-      const data = event.data;
-      const message = typeof data === 'string' ? JSON.parse(data) : data;
-      if (message) {
-        if (message.type === 'pong') {
-          clearTimeout(pingTimeout);
-          pingTimeout = setTimeout(
-            () => this.send({ type: 'ping' }),
-            messageReconnectTimeout / 2
-          );
-        } else if (message.type === 'ping') {
-          this.send({ type: 'pong' });
+      websocket.onmessage = (event: MessageEvent) => {
+        this.lastMessageReceived = Date.now();
+        const data = event.data;
+        const message = typeof data === 'string' ? JSON.parse(data) : data;
+        if (message) {
+          if (message.type === 'pong') {
+            clearTimeout(pingTimeout);
+            pingTimeout = setTimeout(
+              () => this.send({ type: 'ping' }),
+              messageReconnectTimeout / 2
+            );
+          } else if (message.type === 'ping') {
+            this.send({ type: 'pong' });
+          }
         }
         this.emit('message', [message, this]);
-      }
-    };
+      };
 
-    const onclose = (error?: any) => {
-      if (this.ws !== null) {
-        this.ws = null;
-        this.connecting = false;
-        if (this.connected) {
-          this.connected = false;
-          this.emit('disconnect', [{ type: 'disconnect', error }, this]);
-        } else {
-          this.unsuccessfulReconnects++;
+      const onclose = (error?: any) => {
+        if (this.ws !== null) {
+          this.ws = null;
+          this.connecting = false;
+          if (this.connected) {
+            this.connected = false;
+            this.emit('disconnect', [{ type: 'disconnect', error }, this]);
+          } else {
+            this.unsuccessfulReconnects++;
+          }
+          setTimeout(
+            () => this._setupWS(),
+            Math.min(
+              Math.log10(this.unsuccessfulReconnects + 1) *
+                reconnectTimeoutBase,
+              maxReconnectTimeout
+            )
+          );
         }
-        setTimeout(
-          () => this._setupWS(),
-          Math.min(
-            Math.log10(this.unsuccessfulReconnects + 1) * reconnectTimeoutBase,
-            maxReconnectTimeout
-          )
-        );
-      }
-      clearTimeout(pingTimeout);
-    };
+        clearTimeout(pingTimeout);
+      };
 
-    websocket.onclose = () => onclose();
-    websocket.onerror = error => onclose(error);
-    websocket.onopen = () => {
-      this.lastMessageReceived = Date.now();
-      this.connecting = false;
-      this.connected = true;
-      this.unsuccessfulReconnects = 0;
-      this.emit('connect', [{ type: 'connect' }, this]);
-      pingTimeout = setTimeout(
-        () => this.send({ type: 'ping' }),
-        messageReconnectTimeout / 2
-      );
-    };
-    this._ready.set();
+      websocket.onclose = () => onclose();
+      websocket.onerror = error => onclose(error);
+      websocket.onopen = () => {
+        this.lastMessageReceived = Date.now();
+        this.connecting = false;
+        this.connected = true;
+        this.unsuccessfulReconnects = 0;
+        this.emit('connect', [{ type: 'connect' }, this]);
+        pingTimeout = setTimeout(
+          () => this.send({ type: 'ping' }),
+          messageReconnectTimeout / 2
+        );
+      };
+    } finally {
+      this._ready.set();
+      release();
+    }
   }
 
-  send(message: any): void {
-    if (this.ws) {
-      this.ws.send(JSON.stringify(message));
+  async send(message: any): Promise<void> {
+    const messageString = JSON.stringify(message);
+    if (this._ready.is_set()) {
+      this.ws!.send(messageString);
+    } else {
+      this._messagesToSend.push(messageString);
     }
   }
 
@@ -201,8 +255,12 @@ export class WebsocketClient extends EventEmitter {
 
   async connect(): Promise<void> {
     this.shouldConnect = true;
+    const release = await this._lock.acquire();
     if (!this.connected && this.ws === null) {
+      release();
       await this._setupWS();
+    } else {
+      release();
     }
   }
 

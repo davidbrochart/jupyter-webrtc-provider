@@ -32,10 +32,6 @@ const signalingServers = signalingServerUrls
   ? JSON.parse(signalingServerUrls)
   : ['https://flyio-signaling-server.fly.dev'];
 
-function sleep(seconds: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, seconds * 1000));
-}
-
 /**
  * A class to provide Yjs synchronization over WebRTC.
  *
@@ -144,16 +140,7 @@ export class WebRTCProvider implements IDocumentProvider, IForkProvider {
     this._webrtcProvider.on('synced', this._onSynced);
     this._webrtcProvider.on('firstClient', () => {
       this._ready.resolve();
-      this._connected = true;
     });
-    this._waitConnect();
-  }
-
-  async _waitConnect(): Promise<void> {
-    await sleep(1);
-    if (!this._connected) {
-      this.reconnect();
-    }
   }
 
   async connectToForkDoc(forkRoomId: string, sessionId: string): Promise<void> {
@@ -202,7 +189,6 @@ export class WebRTCProvider implements IDocumentProvider, IForkProvider {
       state.set('document_id', this._webrtcProvider.roomName);
     }
     this._ready.resolve();
-    this._connected = true;
   };
 
   private _awareness: Awareness;
@@ -217,7 +203,6 @@ export class WebRTCProvider implements IDocumentProvider, IForkProvider {
   private _drive: Contents.IDrive;
   private _webSocketFactory: IWebSocketFactory;
   private _roomIdManager: IRoomIdManager;
-  private _connected: boolean = false;
 }
 
 /**
