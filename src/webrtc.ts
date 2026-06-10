@@ -7,8 +7,10 @@ import * as encoding from 'lib0/encoding';
 import * as decoding from 'lib0/decoding';
 import { ObservableV2 } from 'lib0/observable';
 import * as logging from 'lib0/logging';
+import * as bc from 'lib0/broadcastchannel';
 import * as buffer from 'lib0/buffer';
 import * as math from 'lib0/math';
+import { createMutex } from 'lib0/mutex';
 
 import * as Y from 'yjs';
 import Peer from 'simple-peer';
@@ -24,6 +26,7 @@ const log = logging.createModuleLogger('webrtc');
 const messageSync = 0;
 const messageQueryAwareness = 3;
 const messageAwareness = 1;
+const messageBcPeerId = 4;
 
 /**
  * Mapping from signaling server URLs to their connections.
@@ -107,6 +110,35 @@ const readMessage = (
         room
       );
       break;
+    case messageBcPeerId: {
+      const add = decoding.readUint8(decoder) === 1;
+      const peerName = decoding.readVarString(decoder);
+      if (
+        peerName !== room.peerId &&
+        ((room.bcConns.has(peerName) && !add) ||
+          (!room.bcConns.has(peerName) && add))
+      ) {
+        const removed: string[] = [];
+        const added: string[] = [];
+        if (add) {
+          room.bcConns.add(peerName);
+          added.push(peerName);
+        } else {
+          room.bcConns.delete(peerName);
+          removed.push(peerName);
+        }
+        room.provider.emit('peers', [
+          {
+            added,
+            removed,
+            webrtcPeers: Array.from(room.webrtcConns.keys()),
+            bcPeers: Array.from(room.bcConns)
+          }
+        ]);
+        broadcastBcPeerId(room);
+      }
+      break;
+    }
     default:
       console.error('Unable to compute message');
       return encoder;
@@ -271,7 +303,8 @@ export class WebrtcConn {
           {
             removed: [this.remotePeerId],
             added: [],
-            webrtcPeers: Array.from(room.webrtcConns.keys())
+            webrtcPeers: Array.from(room.webrtcConns.keys()),
+            bcPeers: Array.from(room.bcConns)
           }
         ]);
       }
@@ -298,9 +331,20 @@ export class WebrtcConn {
 }
 
 /**
- * Broadcast a message to all WebRTC connections in a room.
+ * Broadcast an encrypted message via broadcast channel.
+ */
+const broadcastBcMessage = (room: Room, m: Uint8Array): Promise<void> =>
+  cryptoutils
+    .encrypt(m, room.key)
+    .then(data => room.mux(() => bc.publish(room.name, data)));
+
+/**
+ * Broadcast a message via both broadcast channel and WebRTC connections.
  */
 const broadcastRoomMessage = (room: Room, m: Uint8Array): void => {
+  if (room.bcconnected) {
+    broadcastBcMessage(room, m);
+  }
   broadcastWebrtcConn(room, m);
 };
 
@@ -323,6 +367,20 @@ const announceSignalingInfo = (room: Room): void => {
 };
 
 /**
+ * Broadcast peer ID via broadcast channel.
+ */
+const broadcastBcPeerId = (room: Room): void => {
+  if (room.provider.filterBcConns) {
+    // broadcast peerId via broadcastchannel
+    const encoderPeerIdBc = encoding.createEncoder();
+    encoding.writeVarUint(encoderPeerIdBc, messageBcPeerId);
+    encoding.writeUint8(encoderPeerIdBc, 1);
+    encoding.writeVarString(encoderPeerIdBc, room.peerId);
+    broadcastBcMessage(room, encoding.toUint8Array(encoderPeerIdBc));
+  }
+};
+
+/**
  * Room represents a shared document space with peers.
  */
 export class Room {
@@ -334,6 +392,10 @@ export class Room {
   name: string;
   key: CryptoKey | null;
   webrtcConns: Map<string, WebrtcConn>;
+  bcConns: Set<string>;
+  mux: (f: () => void) => void;
+  bcconnected: boolean;
+  private _bcSubscriber: (data: ArrayBuffer) => Promise<void>;
   private _docUpdateHandler: (update: Uint8Array, origin: any) => void;
   private _awarenessUpdateHandler: (
     {
@@ -369,6 +431,18 @@ export class Room {
     // @todo make key secret by scoping
     this.key = key;
     this.webrtcConns = new Map();
+    this.bcConns = new Set();
+    this.mux = createMutex();
+    this.bcconnected = false;
+    this._bcSubscriber = (data: ArrayBuffer) =>
+      cryptoutils.decrypt(new Uint8Array(data), key).then(m =>
+        this.mux(() => {
+          const reply = readMessage(this, m, () => undefined);
+          if (reply) {
+            broadcastBcMessage(this, encoding.toUint8Array(reply));
+          }
+        })
+      );
     /**
      * Listens to Yjs updates and sends them to remote peers
      */
@@ -422,6 +496,35 @@ export class Room {
     this.awareness.on('update', this._awarenessUpdateHandler);
     // signal through all available signaling connections
     announceSignalingInfo(this);
+    const roomName = this.name;
+    bc.subscribe(roomName, this._bcSubscriber);
+    this.bcconnected = true;
+    // broadcast peerId via broadcastchannel
+    broadcastBcPeerId(this);
+    // write sync step 1
+    const encoderSync = encoding.createEncoder();
+    encoding.writeVarUint(encoderSync, messageSync);
+    syncProtocol.writeSyncStep1(encoderSync, this.doc);
+    broadcastBcMessage(this, encoding.toUint8Array(encoderSync));
+    // broadcast local state
+    const encoderState = encoding.createEncoder();
+    encoding.writeVarUint(encoderState, messageSync);
+    syncProtocol.writeSyncStep2(encoderState, this.doc);
+    broadcastBcMessage(this, encoding.toUint8Array(encoderState));
+    // write queryAwareness
+    const encoderAwarenessQuery = encoding.createEncoder();
+    encoding.writeVarUint(encoderAwarenessQuery, messageQueryAwareness);
+    broadcastBcMessage(this, encoding.toUint8Array(encoderAwarenessQuery));
+    // broadcast local awareness state
+    const encoderAwarenessState = encoding.createEncoder();
+    encoding.writeVarUint(encoderAwarenessState, messageAwareness);
+    encoding.writeVarUint8Array(
+      encoderAwarenessState,
+      awarenessProtocol.encodeAwarenessUpdate(this.awareness, [
+        this.doc.clientID
+      ])
+    );
+    broadcastBcMessage(this, encoding.toUint8Array(encoderAwarenessState));
   }
 
   disconnect(): void {
@@ -436,6 +539,15 @@ export class Room {
       [this.doc.clientID],
       'disconnect'
     );
+    // broadcast peerId removal via broadcastchannel
+    const encoderPeerIdBc = encoding.createEncoder();
+    encoding.writeVarUint(encoderPeerIdBc, messageBcPeerId);
+    encoding.writeUint8(encoderPeerIdBc, 0); // remove peerId from other bc peers
+    encoding.writeVarString(encoderPeerIdBc, this.peerId);
+    broadcastBcMessage(this, encoding.toUint8Array(encoderPeerIdBc));
+
+    bc.unsubscribe(this.name, this._bcSubscriber);
+    this.bcconnected = false;
     this.doc.off('update', this._docUpdateHandler);
     this.awareness.off('update', this._awarenessUpdateHandler);
     this.webrtcConns.forEach(conn => conn.destroy());
@@ -552,7 +664,7 @@ export class SignalingConn extends WebsocketClient {
               data.from === peerId ||
               (data.to !== undefined && data.to !== peerId)
             ) {
-              // ignore messages that are not addressed to this conn
+              // ignore messages that are not addressed to this conn, or from clients that are connected via broadcastchannel
               return;
             }
             const emitPeerChange = () => {
@@ -561,7 +673,8 @@ export class SignalingConn extends WebsocketClient {
                   {
                     removed: [],
                     added: [data.from],
-                    webrtcPeers: Array.from(room.webrtcConns.keys())
+                    webrtcPeers: Array.from(room.webrtcConns.keys()),
+                    bcPeers: Array.from(room.bcConns)
                   }
                 ]);
               }
@@ -641,6 +754,8 @@ export interface IProviderOptions {
   awareness?: awarenessProtocol.Awareness;
   /** Maximum number of simultaneous WebRTC connections. */
   maxConns?: number;
+  /** Whether to filter broadcast channel connections. */
+  filterBcConns?: boolean;
   /** Simple-peer configuration options. */
   peerOpts?: Peer.Options;
   /** Function to load document content. */
@@ -662,6 +777,7 @@ export interface IWebrtcProviderEvents {
     added: string[];
     removed: string[];
     webrtcPeers: string[];
+    bcPeers: string[];
   }) => void;
   firstClient: (event: { roomName: string }) => void;
 }
@@ -679,6 +795,7 @@ const emitStatus = (provider: WebrtcProvider): void => {
 export class WebrtcProvider extends ObservableV2<IWebrtcProviderEvents> {
   roomName: string;
   doc: Y.Doc;
+  filterBcConns: boolean;
   awareness: awarenessProtocol.Awareness;
   shouldConnect: boolean;
   signalingUrls: string[];
@@ -707,6 +824,7 @@ export class WebrtcProvider extends ObservableV2<IWebrtcProviderEvents> {
       password = null,
       awareness = new awarenessProtocol.Awareness(doc),
       maxConns = 20 + math.floor(random.rand() * 15), // the random factor reduces the chance that n clients form a cluster
+      filterBcConns = true,
       peerOpts = {}, // simple-peer options. See https://github.com/feross/simple-peer#peer--new-peeropts
       loadDocument = null,
       webSocketFactory,
@@ -716,6 +834,7 @@ export class WebrtcProvider extends ObservableV2<IWebrtcProviderEvents> {
     super();
     this.roomName = roomName;
     this.doc = doc;
+    this.filterBcConns = filterBcConns;
     this.awareness = awareness;
     this.shouldConnect = false;
     this.signalingUrls = signaling;
@@ -760,20 +879,15 @@ export class WebrtcProvider extends ObservableV2<IWebrtcProviderEvents> {
 
   async connect(): Promise<void> {
     this.shouldConnect = true;
-    for (const url of this.signalingUrls) {
-      let signalingConn = signalingConns.get(url);
-      if (signalingConn === undefined) {
-        signalingConn = new SignalingConn(
-          url,
-          this.webSocketFactory,
-          this.roomIdManager
-        );
-        await signalingConn.ready;
-        signalingConns.set(url, signalingConn);
-      }
+    this.signalingUrls.forEach(url => {
+      const signalingConn = map.setIfUndefined(
+        signalingConns,
+        url,
+        () => new SignalingConn(url, this.webSocketFactory, this.roomIdManager)
+      );
       this.signalingConns.push(signalingConn);
       signalingConn.providers.add(this);
-    }
+    });
     if (this.room) {
       this.room.connect();
       emitStatus(this);
