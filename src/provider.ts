@@ -6,6 +6,8 @@ import {
   JupyterFrontEnd,
   JupyterFrontEndPlugin
 } from '@jupyterlab/application';
+import { showDialog, Dialog } from '@jupyterlab/apputils';
+import { IDocumentWidget } from '@jupyterlab/docregistry';
 import { ITranslator, TranslationBundle } from '@jupyterlab/translation';
 import { IDocumentProvider } from '@jupyter/collaborative-drive';
 import { ServerConnection, User, Contents } from '@jupyterlab/services';
@@ -54,6 +56,8 @@ export class WebRTCProvider implements IDocumentProvider, IForkProvider {
     this._drive = options.drive;
     this._webSocketFactory = options.webSocketFactory;
     this._roomIdManager = options.roomIdManager;
+    this._trans = options.translator;
+    this._app = options.app;
     const user = options.user;
 
     user.ready
@@ -128,7 +132,27 @@ export class WebRTCProvider implements IDocumentProvider, IForkProvider {
           if (model.content === undefined) {
             return;
           }
-          this._sharedModel.source = model.content;
+          try {
+            this._sharedModel.source = model.content;
+          } catch (error) {
+            await showDialog({
+              title: this._trans.__('Error'),
+              body: this._trans.__('The document could not be loaded.'),
+              buttons: [Dialog.okButton({ label: this._trans.__('OK') })]
+            });
+            for (const widget of this._app.shell.widgets('main')) {
+              const docWidget = widget as IDocumentWidget;
+              if (docWidget.context?.path !== this._path) {
+                continue;
+              }
+              const cm = docWidget.context.contentsModel;
+              if (!cm || (cm.type === type && cm.format === format)) {
+                widget.close();
+                break;
+              }
+            }
+            return;
+          }
 
           // Mark document as not dirty after loading
           const state = this._sharedModel.ydoc.getMap('state');
@@ -191,6 +215,7 @@ export class WebRTCProvider implements IDocumentProvider, IForkProvider {
     this._ready.resolve();
   };
 
+  private _app: JupyterFrontEnd;
   private _awareness: Awareness;
   private _contentType: string;
   private _format: string;
@@ -198,6 +223,7 @@ export class WebRTCProvider implements IDocumentProvider, IForkProvider {
   private _path: string;
   private _ready = new PromiseDelegate<void>();
   private _sharedModel: YDocument<DocumentChange>;
+  private _trans: TranslationBundle;
   private _webrtcProvider: YWebrtcProvider | null;
   private _signalingServers: string[];
   private _drive: Contents.IDrive;
@@ -237,6 +263,11 @@ export namespace WebRTCProvider {
      * The user data
      */
     user: User.IManager;
+
+    /**
+     * The Jupyter front-end application.
+     */
+    app: JupyterFrontEnd;
 
     /**
      * The jupyterlab translator
@@ -298,10 +329,12 @@ function getAbsoluteUrls(
  */
 class WebRTCDocumentProviderFactory implements IDocumentProviderFactory {
   constructor(
+    app: JupyterFrontEnd,
     trans: TranslationBundle,
     webSocketFactory: IWebSocketFactory | undefined,
     roomIdManager: IRoomIdManager | undefined
   ) {
+    this._app = app;
     this._trans = trans;
     this._webSocketFactory = webSocketFactory ?? DEFAULT_WEBSOCKET_FACTORY;
     this._roomIdManager = roomIdManager ?? DEFAULT_ROOM_ID_MANAGER;
@@ -319,6 +352,7 @@ class WebRTCDocumentProviderFactory implements IDocumentProviderFactory {
       format: options.format,
       model: options.model,
       user: options.user,
+      app: this._app,
       translator: this._trans,
       serverSettings: options.serverSettings,
       drive: options.drive,
@@ -327,6 +361,7 @@ class WebRTCDocumentProviderFactory implements IDocumentProviderFactory {
     });
   }
 
+  private _app: JupyterFrontEnd;
   private _trans: TranslationBundle;
   private _webSocketFactory: IWebSocketFactory;
   private _roomIdManager: IRoomIdManager;
@@ -381,6 +416,7 @@ export const documentProviderFactoryPlugin: JupyterFrontEndPlugin<IDocumentProvi
     ) => {
       const trans = translator.load('jupyter_collaboration');
       return new WebRTCDocumentProviderFactory(
+        app,
         trans,
         webSocketFactory,
         roomIdManager
