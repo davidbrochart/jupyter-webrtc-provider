@@ -636,8 +636,8 @@ export class SignalingConn extends WebsocketClient {
             if (parsed) {
               const { format, contentType, path } = parsed;
 
-              // we are the first client and it's a stored document, let's load it
-              // Find the provider with the matching roomName
+              // We are the first client and it's a stored document, let's load it.
+              // Find the provider with the matching roomName.
               const provider = Array.from(this.providers).find(
                 p => p.roomName === roomName
               );
