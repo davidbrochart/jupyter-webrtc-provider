@@ -58,16 +58,16 @@ export class WebRTCProvider implements IDocumentProvider, IForkProvider {
     this._roomIdManager = options.roomIdManager;
     this._trans = options.translator;
     this._app = options.app;
+    this._acceptMessage = options.acceptMessage;
     const user = options.user;
 
     user.ready
       .then(() => {
         this._onUserChanged(user);
+        return this._connect();
       })
       .catch(e => console.error(e));
     user.userChanged.connect(this._onUserChanged, this);
-
-    this._connect().catch(e => console.warn(e));
   }
 
   /**
@@ -123,6 +123,8 @@ export class WebRTCProvider implements IDocumentProvider, IForkProvider {
         awareness: this._awareness,
         webSocketFactory: this._webSocketFactory,
         roomIdManager: this._roomIdManager,
+        userId: this._userId,
+        acceptMessage: this._acceptMessage,
         loadDocument: async (format: string, type: string, path: string) => {
           const model = await this._drive.get(path, {
             content: true,
@@ -176,7 +178,9 @@ export class WebRTCProvider implements IDocumentProvider, IForkProvider {
         signaling: this._signalingServers,
         awareness: this._awareness,
         webSocketFactory: this._webSocketFactory,
-        roomIdManager: this._roomIdManager
+        roomIdManager: this._roomIdManager,
+        userId: this._userId,
+        acceptMessage: this._acceptMessage
       }
     );
     this._webrtcProvider.on('synced', this._onSynced);
@@ -202,7 +206,12 @@ export class WebRTCProvider implements IDocumentProvider, IForkProvider {
   }
 
   private _onUserChanged(user: User.IManager): void {
-    this._awareness.setLocalStateField('user', user.identity);
+    const identity = user.identity!;
+    this._userId = identity.username;
+    this._awareness.setLocalStateField('user', identity);
+    if (this._webrtcProvider) {
+      this._webrtcProvider.userId = this._userId;
+    }
   }
 
   private _onSynced = (event: any) => {
@@ -229,6 +238,8 @@ export class WebRTCProvider implements IDocumentProvider, IForkProvider {
   private _drive: Contents.IDrive;
   private _webSocketFactory: IWebSocketFactory;
   private _roomIdManager: IRoomIdManager;
+  private _userId?: string;
+  private _acceptMessage?: (userId: string | null) => boolean;
 }
 
 /**
@@ -298,6 +309,12 @@ export namespace WebRTCProvider {
      * The routine for computing the room id, given the file information.
      */
     roomIdManager: IRoomIdManager;
+
+    /**
+     * Callback to check whether updates from a remote peer should be applied.
+     * Called with the remote peer's userId. Return `true` to allow, `false` to deny.
+     */
+    acceptMessage?: (userId: string | null) => boolean;
   }
 }
 
