@@ -61,15 +61,8 @@ const checkIsSynced = (room: Room): void => {
 const readMessage = (
   room: Room,
   buf: Uint8Array,
-  syncedCallback: () => void,
-  userId?: string
+  syncedCallback: () => void
 ): encoding.Encoder | null => {
-  if (
-    room.provider.acceptMessage &&
-    !room.provider.acceptMessage(userId ?? null)
-  ) {
-    return null;
-  }
   const decoder = decoding.createDecoder(buf);
   const encoder = encoding.createEncoder();
   const messageType = decoding.readVarUint(decoder);
@@ -165,7 +158,6 @@ const readPeerMessage = (
   buf: Uint8Array
 ): encoding.Encoder | null => {
   const room = peerConn.room;
-  const userId = room.peerUserIds.get(peerConn.remotePeerId);
   log(
     'received message from ',
     logging.BOLD,
@@ -177,25 +169,20 @@ const readPeerMessage = (
     logging.UNBOLD,
     logging.UNCOLOR
   );
-  return readMessage(
-    room,
-    buf,
-    () => {
-      peerConn.synced = true;
-      log(
-        'synced ',
-        logging.BOLD,
-        room.name,
-        logging.UNBOLD,
-        ' with ',
-        logging.BOLD,
-        peerConn.remotePeerId
-      );
-      room.provider.contentLoaded = true;
-      checkIsSynced(room);
-    },
-    userId
-  );
+  return readMessage(room, buf, () => {
+    peerConn.synced = true;
+    log(
+      'synced ',
+      logging.BOLD,
+      room.name,
+      logging.UNBOLD,
+      ' with ',
+      logging.BOLD,
+      peerConn.remotePeerId
+    );
+    room.provider.contentLoaded = true;
+    checkIsSynced(room);
+  });
 };
 
 /**
@@ -410,7 +397,6 @@ export class Room {
   key: CryptoKey | null;
   webrtcConns: Map<string, WebrtcConn>;
   bcConns: Set<string>;
-  peerUserIds: Map<string, string>;
   mux: (f: () => void) => void;
   bcconnected: boolean;
   private _bcSubscriber: (data: ArrayBuffer) => Promise<void>;
@@ -450,7 +436,6 @@ export class Room {
     this.key = key;
     this.webrtcConns = new Map();
     this.bcConns = new Set();
-    this.peerUserIds = new Map();
     this.mux = createMutex();
     this.bcconnected = false;
     this._bcSubscriber = (data: ArrayBuffer) =>
@@ -679,7 +664,7 @@ export class SignalingConn extends WebsocketClient {
           if (room === undefined || typeof roomName !== 'string') {
             return;
           }
-          const execMessage = (data: any) => {
+          const execMessage = async (data: any) => {
             const webrtcConns = room.webrtcConns;
             const peerId = room.peerId;
             if (
@@ -704,16 +689,13 @@ export class SignalingConn extends WebsocketClient {
             };
             switch (data.type) {
               case 'announce':
-                if (data.userId) {
-                  room.peerUserIds.set(data.from, data.userId);
+                if (
+                  room.provider.acceptUser &&
+                  !(await room.provider.acceptUser(data.userId ?? null))
+                ) {
+                  break;
                 }
                 if (webrtcConns.size < room.provider.maxConns) {
-                  if (
-                    room.provider.acceptMessage &&
-                    !room.provider.acceptMessage(data.userId ?? null)
-                  ) {
-                    break;
-                  }
                   map.setIfUndefined(
                     webrtcConns,
                     data.from,
@@ -800,11 +782,11 @@ export interface IProviderOptions {
   /** User ID of the local peer, sent in announce messages. */
   userId?: string;
   /**
-   * Callback to check whether updates from a remote peer should be applied.
-   * Called with the remote peer's userId. Return `true` to allow, `false` to deny.
-   * If not set, all updates are accepted.
+   * Callback to check whether a remote user should be accepted.
+   * Called when a peer announces with their userId. Return `true` to allow, `false` to deny.
+   * May be async. If not set, all peers are accepted.
    */
-  acceptMessage?: (userId: string | null) => boolean;
+  acceptUser?: (userId: string | null) => Promise<boolean>;
 }
 
 /**
@@ -851,7 +833,7 @@ export class WebrtcProvider extends ObservableV2<IWebrtcProviderEvents> {
   room: Room | null;
   contentLoaded: boolean;
   userId?: string;
-  acceptMessage?: (userId: string | null) => boolean;
+  acceptUser?: (userId: string | null) => Promise<boolean>;
 
   /**
    * @param roomName - The name of the room to join.
@@ -872,7 +854,7 @@ export class WebrtcProvider extends ObservableV2<IWebrtcProviderEvents> {
       webSocketFactory,
       roomIdManager,
       userId,
-      acceptMessage
+      acceptUser
     }: IProviderOptions
   ) {
     super();
@@ -890,7 +872,7 @@ export class WebrtcProvider extends ObservableV2<IWebrtcProviderEvents> {
     this.roomIdManager = roomIdManager;
     this.contentLoaded = false;
     this.userId = userId;
-    this.acceptMessage = acceptMessage;
+    this.acceptUser = acceptUser;
     this.key = password
       ? cryptoutils.deriveKey(password, roomName)
       : Promise.resolve(null);

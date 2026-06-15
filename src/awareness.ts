@@ -28,7 +28,7 @@ export class WebRTCAwarenessProvider extends WebrtcProvider {
       webSocketFactory: options.webSocketFactory,
       roomIdManager: options.roomIdManager,
       userId: options.userId,
-      acceptMessage: options.acceptMessage
+      acceptUser: options.acceptUser
     });
     this.awareness = options.awareness;
     this._user = options.user;
@@ -115,6 +115,6 @@ export namespace WebRTCAwarenessProvider {
      * Callback to check whether updates from a remote peer should be applied.
      * Called with the remote peer's userId. Return `true` to allow, `false` to deny.
      */
-    acceptMessage?: (userId: string | null) => boolean;
+    acceptUser?: (userId: string | null) => Promise<boolean>;
   }
 }
