@@ -26,6 +26,7 @@ import { IWebSocket, IWebSocketFactory } from './websocket';
 
 import { WebRTCAwarenessProvider } from './awareness';
 import { DEFAULT_ROOM_ID_MANAGER, IRoomIdManager } from './roomid';
+import { IAcceptMessageFromUser } from './acceptmessage';
 
 const DEFAULT_WEBSOCKET_FACTORY = async (url: string) =>
   new WebSocket(url) as unknown as IWebSocket;
@@ -349,12 +350,14 @@ class WebRTCDocumentProviderFactory implements IDocumentProviderFactory {
     app: JupyterFrontEnd,
     trans: TranslationBundle,
     webSocketFactory: IWebSocketFactory | undefined,
-    roomIdManager: IRoomIdManager | undefined
+    roomIdManager: IRoomIdManager | undefined,
+    acceptMessage: IAcceptMessageFromUser | undefined
   ) {
     this._app = app;
     this._trans = trans;
     this._webSocketFactory = webSocketFactory ?? DEFAULT_WEBSOCKET_FACTORY;
     this._roomIdManager = roomIdManager ?? DEFAULT_ROOM_ID_MANAGER;
+    this._acceptMessage = acceptMessage;
   }
 
   create(options: IDocumentProviderFactory.IOptions) {
@@ -374,7 +377,8 @@ class WebRTCDocumentProviderFactory implements IDocumentProviderFactory {
       serverSettings: options.serverSettings,
       drive: options.drive,
       webSocketFactory: this._webSocketFactory,
-      roomIdManager: this._roomIdManager
+      roomIdManager: this._roomIdManager,
+      acceptMessage: this._acceptMessage
     });
   }
 
@@ -382,6 +386,7 @@ class WebRTCDocumentProviderFactory implements IDocumentProviderFactory {
   private _trans: TranslationBundle;
   private _webSocketFactory: IWebSocketFactory;
   private _roomIdManager: IRoomIdManager;
+  private _acceptMessage?: IAcceptMessageFromUser;
 }
 
 /**
@@ -390,10 +395,12 @@ class WebRTCDocumentProviderFactory implements IDocumentProviderFactory {
 class WebRTCAwarenessProviderFactory implements IAwarenessProviderFactory {
   constructor(
     webSocketFactory: IWebSocketFactory | undefined,
-    roomIdManager: IRoomIdManager | undefined
+    roomIdManager: IRoomIdManager | undefined,
+    acceptMessage: IAcceptMessageFromUser | undefined
   ) {
     this._webSocketFactory = webSocketFactory ?? DEFAULT_WEBSOCKET_FACTORY;
     this._roomIdManager = roomIdManager ?? DEFAULT_ROOM_ID_MANAGER;
+    this._acceptMessage = acceptMessage;
   }
 
   create(options: IAwarenessProviderFactory.IOptions) {
@@ -407,12 +414,14 @@ class WebRTCAwarenessProviderFactory implements IAwarenessProviderFactory {
       awareness: options.awareness,
       user: options.user,
       webSocketFactory: this._webSocketFactory,
-      roomIdManager: this._roomIdManager
+      roomIdManager: this._roomIdManager,
+      acceptMessage: this._acceptMessage
     });
   }
 
   private _webSocketFactory: IWebSocketFactory;
   private _roomIdManager: IRoomIdManager;
+  private _acceptMessage?: IAcceptMessageFromUser;
 }
 
 /**
@@ -423,20 +432,22 @@ export const documentProviderFactoryPlugin: JupyterFrontEndPlugin<IDocumentProvi
     id: 'jupyter-webrtc-provider:document-factory',
     description: 'Provides a WebRTC document provider factory.',
     requires: [ITranslator],
-    optional: [IWebSocketFactory, IRoomIdManager],
+    optional: [IWebSocketFactory, IRoomIdManager, IAcceptMessageFromUser],
     provides: IDocumentProviderFactory,
     activate: async (
       app: JupyterFrontEnd,
       translator: ITranslator,
       webSocketFactory?: IWebSocketFactory,
-      roomIdManager?: IRoomIdManager
+      roomIdManager?: IRoomIdManager,
+      acceptMessage?: IAcceptMessageFromUser
     ) => {
       const trans = translator.load('jupyter_collaboration');
       return new WebRTCDocumentProviderFactory(
         app,
         trans,
         webSocketFactory,
-        roomIdManager
+        roomIdManager,
+        acceptMessage
       );
     }
   };
@@ -449,16 +460,18 @@ export const awarenessProviderFactoryPlugin: JupyterFrontEndPlugin<IAwarenessPro
     id: 'jupyter-webrtc-provider:awareness-factory',
     description: 'Provides a WebRTC awareness provider factory.',
     requires: [],
-    optional: [IWebSocketFactory, IRoomIdManager],
+    optional: [IWebSocketFactory, IRoomIdManager, IAcceptMessageFromUser],
     provides: IAwarenessProviderFactory,
     activate: async (
       app: JupyterFrontEnd,
       webSocketFactory?: IWebSocketFactory,
-      roomIdManager?: IRoomIdManager
+      roomIdManager?: IRoomIdManager,
+      acceptMessage?: IAcceptMessageFromUser
     ) => {
       return new WebRTCAwarenessProviderFactory(
         webSocketFactory,
-        roomIdManager
+        roomIdManager,
+        acceptMessage
       );
     }
   };
