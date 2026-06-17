@@ -26,6 +26,7 @@ import { IWebSocket, IWebSocketFactory } from './websocket';
 
 import { WebRTCAwarenessProvider } from './awareness';
 import { DEFAULT_ROOM_ID_MANAGER, IRoomIdManager } from './roomid';
+import { IAcceptUser } from './acceptuser';
 
 const DEFAULT_WEBSOCKET_FACTORY = async (url: string) =>
   new WebSocket(url) as unknown as IWebSocket;
@@ -58,16 +59,16 @@ export class WebRTCProvider implements IDocumentProvider, IForkProvider {
     this._roomIdManager = options.roomIdManager;
     this._trans = options.translator;
     this._app = options.app;
+    this._acceptUser = options.acceptUser;
     const user = options.user;
 
     user.ready
       .then(() => {
         this._onUserChanged(user);
+        return this._connect();
       })
       .catch(e => console.error(e));
     user.userChanged.connect(this._onUserChanged, this);
-
-    this._connect().catch(e => console.warn(e));
   }
 
   /**
@@ -123,6 +124,8 @@ export class WebRTCProvider implements IDocumentProvider, IForkProvider {
         awareness: this._awareness,
         webSocketFactory: this._webSocketFactory,
         roomIdManager: this._roomIdManager,
+        userId: this._userId,
+        acceptUser: this._acceptUser,
         loadDocument: async (format: string, type: string, path: string) => {
           const model = await this._drive.get(path, {
             content: true,
@@ -176,7 +179,9 @@ export class WebRTCProvider implements IDocumentProvider, IForkProvider {
         signaling: this._signalingServers,
         awareness: this._awareness,
         webSocketFactory: this._webSocketFactory,
-        roomIdManager: this._roomIdManager
+        roomIdManager: this._roomIdManager,
+        userId: this._userId,
+        acceptUser: this._acceptUser
       }
     );
     this._webrtcProvider.on('synced', this._onSynced);
@@ -202,7 +207,12 @@ export class WebRTCProvider implements IDocumentProvider, IForkProvider {
   }
 
   private _onUserChanged(user: User.IManager): void {
-    this._awareness.setLocalStateField('user', user.identity);
+    const identity = user.identity!;
+    this._userId = identity.username;
+    this._awareness.setLocalStateField('user', identity);
+    if (this._webrtcProvider) {
+      this._webrtcProvider.userId = this._userId;
+    }
   }
 
   private _onSynced = (event: any) => {
@@ -229,6 +239,8 @@ export class WebRTCProvider implements IDocumentProvider, IForkProvider {
   private _drive: Contents.IDrive;
   private _webSocketFactory: IWebSocketFactory;
   private _roomIdManager: IRoomIdManager;
+  private _userId?: string;
+  private _acceptUser?: (userId: string | null) => Promise<boolean>;
 }
 
 /**
@@ -298,6 +310,12 @@ export namespace WebRTCProvider {
      * The routine for computing the room id, given the file information.
      */
     roomIdManager: IRoomIdManager;
+
+    /**
+     * Callback to check whether updates from a remote peer should be applied.
+     * Called with the remote peer's userId. Return `true` to allow, `false` to deny.
+     */
+    acceptUser?: (userId: string | null) => Promise<boolean>;
   }
 }
 
@@ -332,12 +350,14 @@ class WebRTCDocumentProviderFactory implements IDocumentProviderFactory {
     app: JupyterFrontEnd,
     trans: TranslationBundle,
     webSocketFactory: IWebSocketFactory | undefined,
-    roomIdManager: IRoomIdManager | undefined
+    roomIdManager: IRoomIdManager | undefined,
+    acceptUser: IAcceptUser | undefined
   ) {
     this._app = app;
     this._trans = trans;
     this._webSocketFactory = webSocketFactory ?? DEFAULT_WEBSOCKET_FACTORY;
     this._roomIdManager = roomIdManager ?? DEFAULT_ROOM_ID_MANAGER;
+    this._acceptUser = acceptUser;
   }
 
   create(options: IDocumentProviderFactory.IOptions) {
@@ -357,7 +377,8 @@ class WebRTCDocumentProviderFactory implements IDocumentProviderFactory {
       serverSettings: options.serverSettings,
       drive: options.drive,
       webSocketFactory: this._webSocketFactory,
-      roomIdManager: this._roomIdManager
+      roomIdManager: this._roomIdManager,
+      acceptUser: this._acceptUser
     });
   }
 
@@ -365,6 +386,7 @@ class WebRTCDocumentProviderFactory implements IDocumentProviderFactory {
   private _trans: TranslationBundle;
   private _webSocketFactory: IWebSocketFactory;
   private _roomIdManager: IRoomIdManager;
+  private _acceptUser?: IAcceptUser;
 }
 
 /**
@@ -373,10 +395,12 @@ class WebRTCDocumentProviderFactory implements IDocumentProviderFactory {
 class WebRTCAwarenessProviderFactory implements IAwarenessProviderFactory {
   constructor(
     webSocketFactory: IWebSocketFactory | undefined,
-    roomIdManager: IRoomIdManager | undefined
+    roomIdManager: IRoomIdManager | undefined,
+    acceptUser: IAcceptUser | undefined
   ) {
     this._webSocketFactory = webSocketFactory ?? DEFAULT_WEBSOCKET_FACTORY;
     this._roomIdManager = roomIdManager ?? DEFAULT_ROOM_ID_MANAGER;
+    this._acceptUser = acceptUser;
   }
 
   create(options: IAwarenessProviderFactory.IOptions) {
@@ -390,12 +414,14 @@ class WebRTCAwarenessProviderFactory implements IAwarenessProviderFactory {
       awareness: options.awareness,
       user: options.user,
       webSocketFactory: this._webSocketFactory,
-      roomIdManager: this._roomIdManager
+      roomIdManager: this._roomIdManager,
+      acceptUser: this._acceptUser
     });
   }
 
   private _webSocketFactory: IWebSocketFactory;
   private _roomIdManager: IRoomIdManager;
+  private _acceptUser?: IAcceptUser;
 }
 
 /**
@@ -406,20 +432,22 @@ export const documentProviderFactoryPlugin: JupyterFrontEndPlugin<IDocumentProvi
     id: 'jupyter-webrtc-provider:document-factory',
     description: 'Provides a WebRTC document provider factory.',
     requires: [ITranslator],
-    optional: [IWebSocketFactory, IRoomIdManager],
+    optional: [IWebSocketFactory, IRoomIdManager, IAcceptUser],
     provides: IDocumentProviderFactory,
     activate: async (
       app: JupyterFrontEnd,
       translator: ITranslator,
       webSocketFactory?: IWebSocketFactory,
-      roomIdManager?: IRoomIdManager
+      roomIdManager?: IRoomIdManager,
+      acceptUser?: IAcceptUser
     ) => {
       const trans = translator.load('jupyter_collaboration');
       return new WebRTCDocumentProviderFactory(
         app,
         trans,
         webSocketFactory,
-        roomIdManager
+        roomIdManager,
+        acceptUser
       );
     }
   };
@@ -432,16 +460,18 @@ export const awarenessProviderFactoryPlugin: JupyterFrontEndPlugin<IAwarenessPro
     id: 'jupyter-webrtc-provider:awareness-factory',
     description: 'Provides a WebRTC awareness provider factory.',
     requires: [],
-    optional: [IWebSocketFactory, IRoomIdManager],
+    optional: [IWebSocketFactory, IRoomIdManager, IAcceptUser],
     provides: IAwarenessProviderFactory,
     activate: async (
       app: JupyterFrontEnd,
       webSocketFactory?: IWebSocketFactory,
-      roomIdManager?: IRoomIdManager
+      roomIdManager?: IRoomIdManager,
+      acceptUser?: IAcceptUser
     ) => {
       return new WebRTCAwarenessProviderFactory(
         webSocketFactory,
-        roomIdManager
+        roomIdManager,
+        acceptUser
       );
     }
   };

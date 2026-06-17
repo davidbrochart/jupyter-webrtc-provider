@@ -58,10 +58,14 @@ const checkIsSynced = (room: Room): void => {
 /**
  * Read an incoming message and create a response if needed.
  */
+const isReadOnlyPeer = (room: Room, peerId?: string): boolean =>
+  !!peerId && room.peerPermissions.get(peerId) === 'read';
+
 const readMessage = (
   room: Room,
   buf: Uint8Array,
-  syncedCallback: () => void
+  syncedCallback: () => void,
+  peerId?: string
 ): encoding.Encoder | null => {
   const decoder = decoding.createDecoder(buf);
   const encoder = encoding.createEncoder();
@@ -75,20 +79,24 @@ const readMessage = (
   switch (messageType) {
     case messageSync: {
       encoding.writeVarUint(encoder, messageSync);
-      const syncMessageType = syncProtocol.readSyncMessage(
-        decoder,
-        encoder,
-        doc,
-        room
-      );
-      if (
-        syncMessageType === syncProtocol.messageYjsSyncStep2 &&
-        !room.synced
-      ) {
-        syncedCallback();
-      }
-      if (syncMessageType === syncProtocol.messageYjsSyncStep1) {
+      const syncSubType = decoding.readVarUint(decoder);
+      if (syncSubType === syncProtocol.messageYjsSyncStep2) {
+        if (!isReadOnlyPeer(room, peerId)) {
+          const update = decoding.readVarUint8Array(decoder);
+          Y.applyUpdate(doc, update, room);
+        }
+        if (!room.synced) {
+          syncedCallback();
+        }
+      } else if (syncSubType === syncProtocol.messageYjsSyncStep1) {
+        const sv = decoding.readVarUint8Array(decoder);
+        syncProtocol.writeSyncStep2(encoder, doc, sv);
         sendReply = true;
+      } else if (syncSubType === syncProtocol.messageYjsUpdate) {
+        if (!isReadOnlyPeer(room, peerId)) {
+          const update = decoding.readVarUint8Array(decoder);
+          Y.applyUpdate(doc, update, room);
+        }
       }
       break;
     }
@@ -169,20 +177,25 @@ const readPeerMessage = (
     logging.UNBOLD,
     logging.UNCOLOR
   );
-  return readMessage(room, buf, () => {
-    peerConn.synced = true;
-    log(
-      'synced ',
-      logging.BOLD,
-      room.name,
-      logging.UNBOLD,
-      ' with ',
-      logging.BOLD,
-      peerConn.remotePeerId
-    );
-    room.provider.contentLoaded = true;
-    checkIsSynced(room);
-  });
+  return readMessage(
+    room,
+    buf,
+    () => {
+      peerConn.synced = true;
+      log(
+        'synced ',
+        logging.BOLD,
+        room.name,
+        logging.UNBOLD,
+        ' with ',
+        logging.BOLD,
+        peerConn.remotePeerId
+      );
+      room.provider.contentLoaded = true;
+      checkIsSynced(room);
+    },
+    peerConn.remotePeerId
+  );
 };
 
 /**
@@ -357,10 +370,14 @@ const announceSignalingInfo = (room: Room): void => {
     if (conn.connected) {
       conn.send({ type: 'subscribe', topics: [room.name] });
       if (room.webrtcConns.size < room.provider.maxConns) {
-        publishSignalingMessage(conn, room, {
+        const announce: any = {
           type: 'announce',
           from: room.peerId
-        });
+        };
+        if (room.provider.userId) {
+          announce.userId = room.provider.userId;
+        }
+        publishSignalingMessage(conn, room, announce);
       }
     }
   });
@@ -393,6 +410,7 @@ export class Room {
   key: CryptoKey | null;
   webrtcConns: Map<string, WebrtcConn>;
   bcConns: Set<string>;
+  peerPermissions: Map<string, 'read' | 'write'>;
   mux: (f: () => void) => void;
   bcconnected: boolean;
   private _bcSubscriber: (data: ArrayBuffer) => Promise<void>;
@@ -432,6 +450,7 @@ export class Room {
     this.key = key;
     this.webrtcConns = new Map();
     this.bcConns = new Set();
+    this.peerPermissions = new Map();
     this.mux = createMutex();
     this.bcconnected = false;
     this._bcSubscriber = (data: ArrayBuffer) =>
@@ -620,12 +639,16 @@ export class SignalingConn extends WebsocketClient {
       log(`connected (${url})`);
       const topics = Array.from(rooms.keys());
       this.send({ type: 'subscribe', topics });
-      rooms.forEach(room =>
-        publishSignalingMessage(this, room, {
+      rooms.forEach(room => {
+        const announce: any = {
           type: 'announce',
           from: room.peerId
-        })
-      );
+        };
+        if (room.provider.userId) {
+          announce.userId = room.provider.userId;
+        }
+        publishSignalingMessage(this, room, announce);
+      });
     });
     this.on('message', async (m: any) => {
       switch (m.type) {
@@ -656,7 +679,7 @@ export class SignalingConn extends WebsocketClient {
           if (room === undefined || typeof roomName !== 'string') {
             return;
           }
-          const execMessage = (data: any) => {
+          const execMessage = async (data: any, permission?: string) => {
             const webrtcConns = room.webrtcConns;
             const peerId = room.peerId;
             if (
@@ -681,6 +704,18 @@ export class SignalingConn extends WebsocketClient {
             };
             switch (data.type) {
               case 'announce':
+                if (permission) {
+                  room.peerPermissions.set(
+                    data.from,
+                    permission as 'read' | 'write'
+                  );
+                }
+                if (
+                  room.provider.acceptUser &&
+                  !(await room.provider.acceptUser(data.userId ?? null))
+                ) {
+                  break;
+                }
                 if (webrtcConns.size < room.provider.maxConns) {
                   map.setIfUndefined(
                     webrtcConns,
@@ -728,10 +763,10 @@ export class SignalingConn extends WebsocketClient {
             if (typeof m.data === 'string') {
               cryptoutils
                 .decryptJson(buffer.fromBase64(m.data), room.key)
-                .then(execMessage);
+                .then(data => execMessage(data, m.permission));
             }
           } else {
-            execMessage(m.data);
+            execMessage(m.data, m.permission);
           }
         }
       }
@@ -765,6 +800,14 @@ export interface IProviderOptions {
   /** Factory function to create WebSocket connections. */
   webSocketFactory: IWebSocketFactory;
   roomIdManager: IRoomIdManager;
+  /** User ID of the local peer, sent in announce messages. */
+  userId?: string;
+  /**
+   * Callback to check whether a remote user should be accepted.
+   * Called when a peer announces with their userId. Return `true` to allow, `false` to deny.
+   * May be async. If not set, all peers are accepted.
+   */
+  acceptUser?: (userId: string | null) => Promise<boolean>;
 }
 
 /**
@@ -810,6 +853,8 @@ export class WebrtcProvider extends ObservableV2<IWebrtcProviderEvents> {
   key: Promise<CryptoKey | null>;
   room: Room | null;
   contentLoaded: boolean;
+  userId?: string;
+  acceptUser?: (userId: string | null) => Promise<boolean>;
 
   /**
    * @param roomName - The name of the room to join.
@@ -828,7 +873,9 @@ export class WebrtcProvider extends ObservableV2<IWebrtcProviderEvents> {
       peerOpts = {}, // simple-peer options. See https://github.com/feross/simple-peer#peer--new-peeropts
       loadDocument = null,
       webSocketFactory,
-      roomIdManager
+      roomIdManager,
+      userId,
+      acceptUser
     }: IProviderOptions
   ) {
     super();
@@ -845,6 +892,8 @@ export class WebrtcProvider extends ObservableV2<IWebrtcProviderEvents> {
     this.webSocketFactory = webSocketFactory;
     this.roomIdManager = roomIdManager;
     this.contentLoaded = false;
+    this.userId = userId;
+    this.acceptUser = acceptUser;
     this.key = password
       ? cryptoutils.deriveKey(password, roomName)
       : Promise.resolve(null);

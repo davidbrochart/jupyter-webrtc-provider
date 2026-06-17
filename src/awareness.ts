@@ -26,7 +26,9 @@ export class WebRTCAwarenessProvider extends WebrtcProvider {
       signaling: options.signalingServers,
       awareness: options.awareness,
       webSocketFactory: options.webSocketFactory,
-      roomIdManager: options.roomIdManager
+      roomIdManager: options.roomIdManager,
+      userId: options.userId,
+      acceptUser: options.acceptUser
     });
     this.awareness = options.awareness;
     this._user = options.user;
@@ -51,7 +53,9 @@ export class WebRTCAwarenessProvider extends WebrtcProvider {
   }
 
   private _onUserChanged(user: User.IManager): void {
-    this.awareness.setLocalStateField('user', user.identity);
+    const identity = user.identity!;
+    this.userId = identity.username;
+    this.awareness.setLocalStateField('user', identity);
   }
 
   readonly awareness: IAwareness;
@@ -101,5 +105,16 @@ export namespace WebRTCAwarenessProvider {
      * Room ID manager
      */
     roomIdManager: IRoomIdManager;
+
+    /**
+     * User ID of the local peer, sent in announce messages.
+     */
+    userId?: string;
+
+    /**
+     * Callback to check whether updates from a remote peer should be applied.
+     * Called with the remote peer's userId. Return `true` to allow, `false` to deny.
+     */
+    acceptUser?: (userId: string | null) => Promise<boolean>;
   }
 }
