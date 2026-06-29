@@ -23,8 +23,8 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
-    "jupyter-docprovider >=2.4.0,<3.0.0",
-    "jupyter-collaboration-ui >=2.4.0,<3.0.0",
+    "jupyter-docprovider >=3.0.0a0,<4.0.0",
+    "jupyter-collaboration-ui >=3.0.0a0,<4.0.0",
 ]
 dynamic = ["version", "description", "authors", "urls", "keywords"]
 
@@ -69,7 +69,7 @@ version_cmd = "hatch version"
 
 [tool.jupyter-releaser.hooks]
 before-build-npm = [
-    "python -m pip install 'jupyterlab>=4.0.0,<5'",
+    "python -m pip install 'jupyterlab>=4.6.0,<5'",
     "jlpm",
     "jlpm build:prod"
 ]

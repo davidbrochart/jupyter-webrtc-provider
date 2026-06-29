@@ -56,10 +56,10 @@
     },
     "dependencies": {
         "@jupyter/docprovider": "^4.4.0",
-        "@jupyter/ydoc": "4.0.0-a3",
-        "@jupyterlab/application": "^4.0.0",
-        "@jupyterlab/apputils": "^4.0.0",
-        "@jupyterlab/docregistry": "^4.0.0",
+        "@jupyter/ydoc": "^4.0.0",
+        "@jupyterlab/application": "^4.6.0",
+        "@jupyterlab/apputils": "^4.6.0",
+        "@jupyterlab/docregistry": "^4.6.0",
         "simple-peer": "^9.11.1"
     },
     "devDependencies": {
@@ -89,7 +89,7 @@
     },
     "resolutions": {
         "lib0": "0.2.111",
-        "@jupyter/ydoc": "4.0.0-a3"
+        "@jupyter/ydoc": "4.0.0"
     },
     "sideEffects": [
         "style/*.css",
