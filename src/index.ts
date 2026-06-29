@@ -9,11 +9,14 @@ import {
   documentProviderFactoryPlugin
 } from './provider';
 
+import { roomIdManagerPlugin } from './roomid';
+
 export { awarenessProviderFactoryPlugin, documentProviderFactoryPlugin };
 
 const plugins: JupyterFrontEndPlugin<unknown>[] = [
   documentProviderFactoryPlugin,
-  awarenessProviderFactoryPlugin
+  awarenessProviderFactoryPlugin,
+  roomIdManagerPlugin
 ];
 
 export default plugins;
