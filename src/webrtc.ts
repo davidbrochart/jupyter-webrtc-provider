@@ -795,8 +795,7 @@ export interface IProviderOptions {
   peerOpts?: Peer.Options;
   /** Function to load document content. */
   loadDocument?:
-    | ((format: string, type: string, path: string) => Promise<any>)
-    | null;
+    ((format: string, type: string, path: string) => Promise<any>) | null;
   /** Factory function to create WebSocket connections. */
   webSocketFactory: IWebSocketFactory;
   roomIdManager: IRoomIdManager;
@@ -848,8 +847,7 @@ export class WebrtcProvider extends ObservableV2<IWebrtcProviderEvents> {
   roomIdManager: IRoomIdManager;
   peerOpts: Peer.Options;
   loadDocument:
-    | ((format: string, type: string, path: string) => Promise<any>)
-    | null;
+    ((format: string, type: string, path: string) => Promise<any>) | null;
   key: Promise<CryptoKey | null>;
   room: Room | null;
   contentLoaded: boolean;
