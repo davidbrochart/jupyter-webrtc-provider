@@ -1,4 +1,5 @@
 import { Token } from '@lumino/coreutils';
+import type { JupyterFrontEndPlugin } from '@jupyterlab/application';
 
 export const IRoomIdManager = new Token<IRoomIdManager>(
   'jupyter-webrtc-provider:room-id-manager'
@@ -40,4 +41,13 @@ export const DEFAULT_ROOM_ID_MANAGER: IRoomIdManager = {
       path: split[2]
     };
   }
+};
+
+export const roomIdManagerPlugin: JupyterFrontEndPlugin<IRoomIdManager> = {
+  id: 'jupyter-webrtc-provider:room-id-manager',
+  description: 'Provides a room id manager for the WebRTC provider.',
+  requires: [],
+  optional: [],
+  provides: IRoomIdManager,
+  activate: () => DEFAULT_ROOM_ID_MANAGER
 };
