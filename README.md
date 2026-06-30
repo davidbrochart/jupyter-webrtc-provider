@@ -8,7 +8,7 @@ Install [jupyter-server-signaling](https://github.com/davidbrochart/jupyter-serv
 
 ## Requirements
 
-- JupyterLab >= 4.0.0
+- JupyterLab >= 4.6.0
 
 ## Install
 
