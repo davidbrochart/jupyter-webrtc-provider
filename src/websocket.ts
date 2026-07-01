@@ -121,7 +121,7 @@ export class WebsocketClient extends EventEmitter {
   lastMessageReceived = 0;
   shouldConnect = true;
   private _checkInterval: any;
-  private _webSocketFactory: IWebSocketFactory;
+  private _webSocketFactory: IWebSocketFactory | undefined;
   private _lock: AsyncLock;
   private _ready: AsyncEvent;
   private _messagesToSend: string[];
@@ -133,8 +133,8 @@ export class WebsocketClient extends EventEmitter {
       webSocketFactory
     }: {
       binaryType?: 'arraybuffer' | 'blob' | null;
-      webSocketFactory: IWebSocketFactory;
-    }
+      webSocketFactory?: IWebSocketFactory;
+    } = {}
   ) {
     super();
     this.url = url;
@@ -170,7 +170,7 @@ export class WebsocketClient extends EventEmitter {
         return;
       }
 
-      const websocket = await this._webSocketFactory(this.url);
+      const websocket = await this.createWebSocket(this.url);
       if (this.binaryType) {
         websocket.binaryType = this.binaryType;
       }
@@ -237,6 +237,15 @@ export class WebsocketClient extends EventEmitter {
       this._ready.set();
       release();
     }
+  }
+
+  protected createWebSocket(url: string): Promise<IWebSocket> {
+    if (!this._webSocketFactory) {
+      throw new Error(
+        'No webSocketFactory provided and createWebSocket not overridden'
+      );
+    }
+    return this._webSocketFactory(url);
   }
 
   async send(message: any): Promise<void> {
