@@ -654,7 +654,8 @@ export class SignalingConn extends WebsocketClient {
       switch (m.type) {
         case 'publish': {
           const roomName = m.topic;
-          if (m.clients === 1) {
+          const room = rooms.get(roomName);
+          if (room && m.data.from === room.peerId && m.clients === 1) {
             const parsed = await this.roomIdManager.parseRoomId(roomName);
             if (parsed) {
               const { format, contentType, path } = parsed;
@@ -675,7 +676,6 @@ export class SignalingConn extends WebsocketClient {
               provider?.emit('firstClient', [{ roomName }]);
             }
           }
-          const room = rooms.get(roomName);
           if (room === undefined || typeof roomName !== 'string') {
             return;
           }
