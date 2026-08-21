@@ -7,7 +7,7 @@ import {
   JupyterFrontEndPlugin
 } from '@jupyterlab/application';
 import { showDialog, Dialog } from '@jupyterlab/apputils';
-import { IDocumentWidget } from '@jupyterlab/docregistry';
+import { DocumentRegistry, IDocumentWidget } from '@jupyterlab/docregistry';
 import { ITranslator, TranslationBundle } from '@jupyterlab/translation';
 import { IDocumentProvider } from '@jupyter/collaborative-drive';
 import { ServerConnection, User, Contents } from '@jupyterlab/services';
@@ -18,7 +18,7 @@ import { Signal } from '@lumino/signaling';
 import { DocumentChange, YDocument } from '@jupyter/ydoc';
 
 import { Awareness } from 'y-protocols/awareness';
-import { WebrtcProvider as YWebrtcProvider } from './webrtc';
+import { Permission, WebrtcProvider as YWebrtcProvider } from './webrtc';
 
 import { IForkProvider } from '@jupyter/docprovider';
 import { PageConfig, URLExt } from '@jupyterlab/coreutils';
@@ -60,6 +60,7 @@ export class WebRTCProvider implements IDocumentProvider, IForkProvider {
     this._trans = options.translator;
     this._app = options.app;
     this._acceptUser = options.acceptUser;
+    this._app.shell.currentChanged?.connect(this._onCurrentChanged, this);
     const user = options.user;
 
     user.ready
@@ -92,6 +93,18 @@ export class WebRTCProvider implements IDocumentProvider, IForkProvider {
     return this._format;
   }
 
+  /** The permission reported by a permission-aware signaling server. */
+  get permission(): Permission | undefined {
+    return this._permission;
+  }
+
+  /** Whether this peer must not modify or save the shared document. */
+  get readOnly(): boolean {
+    return this._permission === 'read';
+  }
+
+  readonly permissionChanged = new Signal<this, Permission | undefined>(this);
+
   /**
    * Dispose of the resources held by the object.
    */
@@ -103,6 +116,8 @@ export class WebRTCProvider implements IDocumentProvider, IForkProvider {
     this._webrtcProvider?.off('synced', this._onSynced);
     this._webrtcProvider?.destroy();
     this._disconnect();
+    this._app.shell.currentChanged?.disconnect(this._onCurrentChanged, this);
+    this._restoreDocumentModels();
     Signal.clearData(this);
   }
 
@@ -165,6 +180,7 @@ export class WebRTCProvider implements IDocumentProvider, IForkProvider {
     );
 
     this._webrtcProvider.on('synced', this._onSynced);
+    this._webrtcProvider.on('permission', this._onPermission);
     this._webrtcProvider.on('firstClient', () => {
       this._ready.resolve();
     });
@@ -185,9 +201,13 @@ export class WebRTCProvider implements IDocumentProvider, IForkProvider {
       }
     );
     this._webrtcProvider.on('synced', this._onSynced);
+    this._webrtcProvider.on('permission', this._onPermission);
   }
 
   async save(): Promise<void> {
+    if (this.readOnly) {
+      throw new Error('Cannot save a read-only document');
+    }
     const content = this._sharedModel.source;
     const model = await this._drive.save(this._path, {
       content,
@@ -202,6 +222,7 @@ export class WebRTCProvider implements IDocumentProvider, IForkProvider {
 
   private _disconnect(): void {
     this._webrtcProvider?.off('synced', this._onSynced);
+    this._webrtcProvider?.off('permission', this._onPermission);
     this._webrtcProvider?.destroy();
     this._webrtcProvider = null;
   }
@@ -225,18 +246,58 @@ export class WebRTCProvider implements IDocumentProvider, IForkProvider {
     this._ready.resolve();
   };
 
+  private _onPermission = (event: { permission?: Permission }) => {
+    if (this._permission !== event.permission) {
+      this._permission = event.permission;
+      this._updateDocumentModels();
+      this.permissionChanged.emit(event.permission);
+    }
+  };
+
+  private _onCurrentChanged = () => {
+    this._updateDocumentModels();
+  };
+
+  private _updateDocumentModels(): void {
+    if (!this.readOnly) {
+      this._restoreDocumentModels();
+      return;
+    }
+    for (const widget of this._app.shell.widgets('main')) {
+      const docWidget = widget as IDocumentWidget;
+      if (
+        docWidget.context?.path === this._path &&
+        !docWidget.context.model.readOnly
+      ) {
+        docWidget.context.model.readOnly = true;
+        this._documentModels.add(docWidget.context.model);
+      }
+    }
+  }
+
+  private _restoreDocumentModels(): void {
+    this._documentModels.forEach(model => {
+      if (!model.isDisposed) {
+        model.readOnly = false;
+      }
+    });
+    this._documentModels.clear();
+  }
+
   private _app: JupyterFrontEnd;
   private _awareness: Awareness;
   private _contentType: string;
   private _format: string;
   private _isDisposed: boolean;
   private _path: string;
+  private _permission?: Permission;
   private _ready = new PromiseDelegate<void>();
   private _sharedModel: YDocument<DocumentChange>;
   private _trans: TranslationBundle;
   private _webrtcProvider: YWebrtcProvider | null;
   private _signalingServers: string[];
   private _drive: Contents.IDrive;
+  private _documentModels = new Set<DocumentRegistry.IModel>();
   private _webSocketFactory: IWebSocketFactory;
   private _roomIdManager: IRoomIdManager;
   private _userId?: string;
