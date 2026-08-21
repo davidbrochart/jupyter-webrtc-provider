@@ -28,6 +28,8 @@ const messageQueryAwareness = 3;
 const messageAwareness = 1;
 const messageBcPeerId = 4;
 
+export type Permission = 'read' | 'write';
+
 /**
  * Mapping from signaling server URLs to their connections.
  */
@@ -58,8 +60,9 @@ const checkIsSynced = (room: Room): void => {
 /**
  * Read an incoming message and create a response if needed.
  */
-const isReadOnlyPeer = (room: Room, peerId?: string): boolean =>
-  !!peerId && room.peerPermissions.get(peerId) === 'read';
+const canPeerWrite = (room: Room, peerId?: string): boolean =>
+  !room.permissionsEnabled ||
+  (!!peerId && room.webrtcConns.get(peerId)?.permission === 'write');
 
 const readMessage = (
   room: Room,
@@ -81,7 +84,7 @@ const readMessage = (
       encoding.writeVarUint(encoder, messageSync);
       const syncSubType = decoding.readVarUint(decoder);
       if (syncSubType === syncProtocol.messageYjsSyncStep2) {
-        if (!isReadOnlyPeer(room, peerId)) {
+        if (canPeerWrite(room, peerId)) {
           const update = decoding.readVarUint8Array(decoder);
           Y.applyUpdate(doc, update, room);
         }
@@ -93,7 +96,7 @@ const readMessage = (
         syncProtocol.writeSyncStep2(encoder, doc, sv);
         sendReply = true;
       } else if (syncSubType === syncProtocol.messageYjsUpdate) {
-        if (!isReadOnlyPeer(room, peerId)) {
+        if (canPeerWrite(room, peerId)) {
           const update = decoding.readVarUint8Array(decoder);
           Y.applyUpdate(doc, update, room);
         }
@@ -248,6 +251,7 @@ export class WebrtcConn {
   connected: boolean;
   synced: boolean;
   peer: Peer.Instance;
+  permission?: Permission;
 
   /**
    * @param signalingConn - The signaling connection used to establish this WebRTC connection.
@@ -268,6 +272,7 @@ export class WebrtcConn {
     this.closed = false;
     this.connected = false;
     this.synced = false;
+    this.permission = room.peerPermissions.get(remotePeerId);
     this.peer = new Peer({ initiator, ...room.provider.peerOpts });
     this.peer.on('signal', signal => {
       if (this.glareToken === undefined) {
@@ -312,6 +317,7 @@ export class WebrtcConn {
       this.closed = true;
       if (room.webrtcConns.has(this.remotePeerId)) {
         room.webrtcConns.delete(this.remotePeerId);
+        room.peerPermissions.delete(this.remotePeerId);
         room.provider.emit('peers', [
           {
             removed: [this.remotePeerId],
@@ -411,6 +417,7 @@ export class Room {
   webrtcConns: Map<string, WebrtcConn>;
   bcConns: Set<string>;
   peerPermissions: Map<string, 'read' | 'write'>;
+  permissionsEnabled: boolean;
   mux: (f: () => void) => void;
   bcconnected: boolean;
   private _bcSubscriber: (data: ArrayBuffer) => Promise<void>;
@@ -451,6 +458,7 @@ export class Room {
     this.webrtcConns = new Map();
     this.bcConns = new Set();
     this.peerPermissions = new Map();
+    this.permissionsEnabled = false;
     this.mux = createMutex();
     this.bcconnected = false;
     this._bcSubscriber = (data: ArrayBuffer) =>
@@ -466,6 +474,9 @@ export class Room {
      * Listens to Yjs updates and sends them to remote peers
      */
     this._docUpdateHandler = (update: Uint8Array, _origin: any) => {
+      if (this.permissionsEnabled && provider.permission !== 'write') {
+        return;
+      }
       const encoder = encoding.createEncoder();
       encoding.writeVarUint(encoder, messageSync);
       syncProtocol.writeUpdate(encoder, update);
@@ -516,34 +527,46 @@ export class Room {
     // signal through all available signaling connections
     announceSignalingInfo(this);
     const roomName = this.name;
-    bc.subscribe(roomName, this._bcSubscriber);
-    this.bcconnected = true;
-    // broadcast peerId via broadcastchannel
-    broadcastBcPeerId(this);
-    // write sync step 1
-    const encoderSync = encoding.createEncoder();
-    encoding.writeVarUint(encoderSync, messageSync);
-    syncProtocol.writeSyncStep1(encoderSync, this.doc);
-    broadcastBcMessage(this, encoding.toUint8Array(encoderSync));
-    // broadcast local state
-    const encoderState = encoding.createEncoder();
-    encoding.writeVarUint(encoderState, messageSync);
-    syncProtocol.writeSyncStep2(encoderState, this.doc);
-    broadcastBcMessage(this, encoding.toUint8Array(encoderState));
-    // write queryAwareness
-    const encoderAwarenessQuery = encoding.createEncoder();
-    encoding.writeVarUint(encoderAwarenessQuery, messageQueryAwareness);
-    broadcastBcMessage(this, encoding.toUint8Array(encoderAwarenessQuery));
-    // broadcast local awareness state
-    const encoderAwarenessState = encoding.createEncoder();
-    encoding.writeVarUint(encoderAwarenessState, messageAwareness);
-    encoding.writeVarUint8Array(
-      encoderAwarenessState,
-      awarenessProtocol.encodeAwarenessUpdate(this.awareness, [
-        this.doc.clientID
-      ])
-    );
-    broadcastBcMessage(this, encoding.toUint8Array(encoderAwarenessState));
+    if (!this.permissionsEnabled) {
+      bc.subscribe(roomName, this._bcSubscriber);
+      this.bcconnected = true;
+      // broadcast peerId via broadcastchannel
+      broadcastBcPeerId(this);
+      // write sync step 1
+      const encoderSync = encoding.createEncoder();
+      encoding.writeVarUint(encoderSync, messageSync);
+      syncProtocol.writeSyncStep1(encoderSync, this.doc);
+      broadcastBcMessage(this, encoding.toUint8Array(encoderSync));
+      // broadcast local state
+      const encoderState = encoding.createEncoder();
+      encoding.writeVarUint(encoderState, messageSync);
+      syncProtocol.writeSyncStep2(encoderState, this.doc);
+      broadcastBcMessage(this, encoding.toUint8Array(encoderState));
+      // write queryAwareness
+      const encoderAwarenessQuery = encoding.createEncoder();
+      encoding.writeVarUint(encoderAwarenessQuery, messageQueryAwareness);
+      broadcastBcMessage(this, encoding.toUint8Array(encoderAwarenessQuery));
+      // broadcast local awareness state
+      const encoderAwarenessState = encoding.createEncoder();
+      encoding.writeVarUint(encoderAwarenessState, messageAwareness);
+      encoding.writeVarUint8Array(
+        encoderAwarenessState,
+        awarenessProtocol.encodeAwarenessUpdate(this.awareness, [
+          this.doc.clientID
+        ])
+      );
+      broadcastBcMessage(this, encoding.toUint8Array(encoderAwarenessState));
+    }
+  }
+
+  enablePermissions(): void {
+    this.permissionsEnabled = true;
+    // BroadcastChannel messages do not carry an authenticated sender identity,
+    // so they cannot safely participate in a permission-enforced room.
+    if (this.bcconnected) {
+      bc.unsubscribe(this.name, this._bcSubscriber);
+      this.bcconnected = false;
+    }
   }
 
   disconnect(): void {
@@ -679,7 +702,11 @@ export class SignalingConn extends WebsocketClient {
           if (room === undefined || typeof roomName !== 'string') {
             return;
           }
-          const execMessage = async (data: any, permission?: string) => {
+          const permission: Permission | undefined =
+            m.permission === 'read' || m.permission === 'write'
+              ? m.permission
+              : undefined;
+          const execMessage = async (data: any) => {
             const webrtcConns = room.webrtcConns;
             const peerId = room.peerId;
             if (
@@ -689,6 +716,14 @@ export class SignalingConn extends WebsocketClient {
             ) {
               // ignore messages that are not addressed to this conn, or from clients that are connected via broadcastchannel
               return;
+            }
+            if (permission) {
+              room.enablePermissions();
+              room.peerPermissions.set(data.from, permission);
+              const existingConn = webrtcConns.get(data.from);
+              if (existingConn) {
+                existingConn.permission = permission;
+              }
             }
             const emitPeerChange = () => {
               if (!webrtcConns.has(data.from)) {
@@ -704,12 +739,6 @@ export class SignalingConn extends WebsocketClient {
             };
             switch (data.type) {
               case 'announce':
-                if (permission) {
-                  room.peerPermissions.set(
-                    data.from,
-                    permission as 'read' | 'write'
-                  );
-                }
                 if (
                   room.provider.acceptUser &&
                   !(await room.provider.acceptUser(data.userId ?? null))
@@ -763,11 +792,20 @@ export class SignalingConn extends WebsocketClient {
             if (typeof m.data === 'string') {
               cryptoutils
                 .decryptJson(buffer.fromBase64(m.data), room.key)
-                .then(data => execMessage(data, m.permission));
+                .then(data => execMessage(data));
             }
           } else {
-            execMessage(m.data, m.permission);
+            execMessage(m.data);
           }
+          break;
+        }
+        case 'subscribed': {
+          const room = rooms.get(m.topic);
+          if (room && (m.permission === 'read' || m.permission === 'write')) {
+            room.enablePermissions();
+            room.provider.setPermission(m.permission);
+          }
+          break;
         }
       }
     });
@@ -822,6 +860,7 @@ export interface IWebrtcProviderEvents {
     bcPeers: string[];
   }) => void;
   firstClient: (event: { roomName: string }) => void;
+  permission: (event: { permission?: Permission }) => void;
 }
 
 /**
@@ -853,6 +892,7 @@ export class WebrtcProvider extends ObservableV2<IWebrtcProviderEvents> {
   contentLoaded: boolean;
   userId?: string;
   acceptUser?: (userId: string | null) => Promise<boolean>;
+  permission?: Permission;
 
   /**
    * @param roomName - The name of the room to join.
@@ -892,6 +932,7 @@ export class WebrtcProvider extends ObservableV2<IWebrtcProviderEvents> {
     this.contentLoaded = false;
     this.userId = userId;
     this.acceptUser = acceptUser;
+    this.permission = undefined;
     this.key = password
       ? cryptoutils.deriveKey(password, roomName)
       : Promise.resolve(null);
@@ -922,6 +963,13 @@ export class WebrtcProvider extends ObservableV2<IWebrtcProviderEvents> {
    */
   get connected(): boolean {
     return this.room !== null && this.shouldConnect;
+  }
+
+  setPermission(permission?: Permission): void {
+    if (this.permission !== permission) {
+      this.permission = permission;
+      this.emit('permission', [{ permission }]);
+    }
   }
 
   async connect(): Promise<void> {
